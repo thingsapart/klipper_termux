@@ -142,6 +142,9 @@ if grep -q 'Installing native Moonraker' <<<"$output"; then
 fi
 grep -q '^provider: none$' "$ROOT/installer/config/moonraker.conf"
 grep -q '^enable_config_write_access: True$' "$ROOT/installer/config/moonraker.conf"
+grep -q '^\[zeroconf\]$' "$ROOT/installer/config/moonraker.conf"
+grep -q '^mdns_hostname: klipper-android$' "$ROOT/installer/config/moonraker.conf"
+grep -Fq 'proxy_set_header Host $http_host;' "$ROOT/installer/config/nginx.conf"
 
 reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-reinstall-test.XXXXXX")"
 trap 'rm -rf "$reinstall_home"' EXIT
@@ -170,6 +173,8 @@ full_update_output="$(PREFIX=/not/termux HOME="$reinstall_home" \
   bash "$ROOT/installer/install.sh" --dry-run --source-dir "$ROOT" --update)"
 grep -q 'mainsail.zip.part' <<<"$full_update_output"
 grep -q 'mainsail.new.' <<<"$full_update_output"
+grep -q 'iproute2' <<<"$full_update_output"
+grep -q 'config/nginx.conf.*printer_data/config/nginx.conf' <<<"$full_update_output"
 grep -q 'Mainsail archive did not contain index.html' "$ROOT/installer/install.sh"
 grep -q 'restart-after-update' "$ROOT/installer/install.sh"
 grep -q 'installer.log' "$ROOT/installer/install.sh"
@@ -177,4 +182,23 @@ if grep -q '(( is_new )) &&' "$ROOT/installer/install.sh"; then
   echo "install_service still returns failure for an existing service" >&2
   exit 1
 fi
+
+hostname_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-hostname-test.XXXXXX")"
+mkdir -p "$hostname_home/printer_data/config"
+cp "$ROOT/installer/config/moonraker.conf" "$hostname_home/printer_data/config/moonraker.conf"
+hostname_kabctl="$(sed \
+  -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
+  -e 's|@PREFIX@|/not/termux|g' \
+  -e "s|@HOME@|$hostname_home|g" \
+  -e "s|@DATA_DIR@|$hostname_home/printer_data|g" \
+  -e 's|@WEB_PORT@|8080|g' \
+  "$ROOT/installer/kabctl")"
+bash -c "$hostname_kabctl" kabctl hostname workshop-printer >/dev/null
+grep -q '^mdns_hostname: workshop-printer$' \
+  "$hostname_home/printer_data/config/moonraker.conf"
+if bash -c "$hostname_kabctl" kabctl hostname invalid.name >/dev/null 2>&1; then
+  echo "kabctl accepted an invalid mDNS hostname" >&2
+  exit 1
+fi
+rm -rf "$hostname_home"
 echo "test_installer: ok"

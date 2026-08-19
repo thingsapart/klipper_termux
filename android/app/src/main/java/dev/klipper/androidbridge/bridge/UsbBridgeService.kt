@@ -12,6 +12,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.net.wifi.WifiManager
 import dev.klipper.androidbridge.MainActivity
 import dev.klipper.androidbridge.R
 import com.hoho.android.usbserial.driver.UsbSerialPort
@@ -37,11 +38,18 @@ class UsbBridgeService : Service() {
     private lateinit var usbManager: UsbManager
     private var server: ServerSocket? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     override fun onCreate() {
         super.onCreate()
         repository = DeviceRepository(this)
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        multicastLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager)
+            ?.createMulticastLock("$packageName:moonrakerMdns")
+            ?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
         createNotificationChannel()
         enterForeground()
         startListener()
@@ -245,6 +253,8 @@ class UsbBridgeService : Service() {
         sessions.clear()
         clients.shutdownNow()
         wakeLock?.let { if (it.isHeld) it.release() }
+        multicastLock?.let { if (it.isHeld) it.release() }
+        multicastLock = null
         BridgeState.sessions.clear()
         BridgeState.serviceRunning = false
         super.onDestroy()

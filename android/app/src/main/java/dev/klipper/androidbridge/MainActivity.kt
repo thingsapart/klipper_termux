@@ -45,6 +45,7 @@ import dev.klipper.androidbridge.bridge.BridgeState
 import dev.klipper.androidbridge.bridge.DeviceRepository
 import dev.klipper.androidbridge.bridge.ExternalWebAddress
 import dev.klipper.androidbridge.bridge.MainsailAddress
+import dev.klipper.androidbridge.bridge.NetworkAddress
 import dev.klipper.androidbridge.bridge.UsbBridgeService
 import dev.klipper.androidbridge.bridge.toHex
 import java.util.UUID
@@ -70,6 +71,8 @@ class MainActivity : Activity() {
     private lateinit var mainsailError: View
     private lateinit var mainsailErrorMessage: TextView
     private lateinit var mainsailUrlInput: EditText
+    private lateinit var mdnsHostnameInput: EditText
+    private lateinit var networkAddressView: TextView
     private lateinit var termuxDownloadUrlInput: EditText
     private lateinit var termuxGithubReleasesUrlInput: EditText
     private lateinit var drawerDashboard: TextView
@@ -98,6 +101,8 @@ class MainActivity : Activity() {
     private var lastNextWizardStep = -2
     private var mainsailPageFailed = false
     private var installerIsConfigured = false
+    private var cachedLanAddress: String? = null
+    private var nextLanAddressRefresh = 0L
     private val handler = Handler(Looper.getMainLooper())
     private val previousBytes = mutableMapOf<UUID, Triple<Long, Long, Long>>()
     private val refresh = object : Runnable {
@@ -130,6 +135,8 @@ class MainActivity : Activity() {
         mainsailError = findViewById(R.id.mainsail_error)
         mainsailErrorMessage = findViewById(R.id.mainsail_error_message)
         mainsailUrlInput = findViewById(R.id.mainsail_url)
+        mdnsHostnameInput = findViewById(R.id.mdns_hostname)
+        networkAddressView = findViewById(R.id.network_address)
         termuxDownloadUrlInput = findViewById(R.id.termux_download_url)
         termuxGithubReleasesUrlInput = findViewById(R.id.termux_github_releases_url)
         drawerDashboard = findViewById(R.id.drawer_dashboard)
@@ -209,7 +216,17 @@ class MainActivity : Activity() {
         primaryToggle.setOnClickListener { navigate(AppNavigation.toggle(destination)) }
         overflowButton.setOnClickListener { showOverflow(it) }
         mainsailUrlInput.setText(repository.mainsailUrl())
+        mdnsHostnameInput.setText(repository.mdnsHostname())
         findViewById<Button>(R.id.save_mainsail_url).setOnClickListener { saveMainsailUrl() }
+        findViewById<Button>(R.id.save_mdns_hostname).setOnClickListener { saveMdnsHostname() }
+        networkAddressView.setOnClickListener {
+            val port = Uri.parse(repository.mainsailUrl()).port.takeIf { it > 0 } ?: 80
+            val address = cachedLanAddress
+            val url = if (address != null) "http://$address:$port/" else {
+                "http://${repository.mdnsHostname()}.local:$port/"
+            }
+            copyToClipboard("Mainsail LAN address", url, "Mainsail address copied")
+        }
         termuxDownloadUrlInput.setText(repository.termuxDownloadUrl(BuildConfig.TERMUX_DOWNLOAD_URL))
         termuxGithubReleasesUrlInput.setText(
             repository.termuxGithubReleasesUrl(BuildConfig.TERMUX_GITHUB_RELEASES_URL),
@@ -614,6 +631,22 @@ class MainActivity : Activity() {
             .onFailure { mainsailUrlInput.error = it.message ?: "Invalid loopback URL" }
     }
 
+    private fun saveMdnsHostname() {
+        runCatching { repository.setMdnsHostname(mdnsHostnameInput.text.toString()) }
+            .onSuccess { hostname ->
+                mdnsHostnameInput.error = null
+                mdnsHostnameInput.setText(hostname)
+                handleTermuxResult(
+                    TermuxRunner.configureHostname(this, hostname),
+                    "mDNS hostname applied: $hostname.local",
+                )
+                render()
+            }
+            .onFailure {
+                mdnsHostnameInput.error = it.message ?: "Invalid hostname"
+            }
+    }
+
     private fun saveTermuxLinks() {
         runCatching {
             repository.setTermuxLinks(
@@ -783,6 +816,16 @@ class MainActivity : Activity() {
         val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
         renderWizard()
         val now = System.currentTimeMillis()
+        if (now >= nextLanAddressRefresh) {
+            cachedLanAddress = NetworkAddress.currentIpv4()
+            nextLanAddressRefresh = now + 5_000
+        }
+        val webPort = Uri.parse(repository.mainsailUrl()).port.takeIf { it > 0 } ?: 80
+        networkAddressView.text = buildString {
+            append("LAN  ·  ")
+            append(cachedLanAddress?.let { "http://$it:$webPort/" } ?: "address unavailable")
+            append("\nmDNS  ·  http://${repository.mdnsHostname()}.local:$webPort/")
+        }
         val dataActive = snapshots.values.any { now - it.lastActivityMillis < 1500 }
         statusBridgeSwitch.setBackgroundResource(
             when {

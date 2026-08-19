@@ -14,6 +14,7 @@ object TermuxRunner {
     private const val HOME = "/data/data/com.termux/files/home"
     private const val SHELL = "/data/data/com.termux/files/usr/bin/bash"
     private const val RUNNER = "$HOME/.local/bin/klipper-android-runner"
+    private const val KABCTL = "$HOME/.local/bin/kabctl"
     const val ENABLE_EXTERNAL_APPS_COMMAND =
         "mkdir -p ~/.termux; touch ~/.termux/termux.properties; " +
             "sed -i -E '/^[[:space:]]*allow-external-apps[[:space:]]*=/d' " +
@@ -57,6 +58,11 @@ object TermuxRunner {
             "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/; " +
             "s/^device=main,[^,]*/device=main,$device/' '$config'"
         return dispatch(context, SHELL, arrayOf("-lc", command))
+    }
+
+    fun configureHostname(context: Context, hostname: String): Result {
+        require(hostname.matches(Regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")))
+        return dispatch(context, KABCTL, arrayOf("hostname", hostname))
     }
 
     fun isInstalled(context: Context): Boolean = try {

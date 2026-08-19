@@ -255,7 +255,7 @@ render_template() {
 }
 
 log "Installing native Termux dependencies"
-PACKAGES=(git python clang make ndk-sysroot libffi openssl zlib curl unzip termux-services)
+PACKAGES=(git python clang make ndk-sysroot libffi openssl zlib curl unzip iproute2 termux-services)
 (( INSTALL_MOONRAKER )) && PACKAGES+=(libsodium libjpeg-turbo)
 (( INSTALL_UI )) && PACKAGES+=(nginx)
 run pkg install -y "${PACKAGES[@]}"
@@ -319,6 +319,7 @@ if (( UPDATE )); then
     repair_existing_service "moonraker" "$SOURCE_DIR/installer/services/moonraker.run"
   fi
   if (( INSTALL_UI )); then
+    render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf" 1
     repair_existing_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
   fi
   render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
@@ -438,6 +439,15 @@ if (( INSTALL_MOONRAKER )); then
         >>"$MOONRAKER_CONFIG"
     fi
   fi
+  if [[ -f "$MOONRAKER_CONFIG" ]] && ! grep -qE '^[[:space:]]*\[zeroconf\][[:space:]]*$' "$MOONRAKER_CONFIG"; then
+    if (( DRY_RUN )); then
+      printf '+ add Moonraker mDNS hostname to %s\n' "$MOONRAKER_CONFIG"
+    else
+      prepare_update_mutation
+      printf '\n# Advertise the phone on the local network.\n[zeroconf]\nmdns_hostname: klipper-android\n' \
+        >>"$MOONRAKER_CONFIG"
+    fi
+  fi
 fi
 
 install_service() {
@@ -507,7 +517,7 @@ if (( INSTALL_UI )); then
   else
     log "Mainsail $MAINSAIL_VERSION is already installed"
   fi
-  render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf"
+  render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf" 1
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi
 

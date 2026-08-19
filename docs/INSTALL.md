@@ -68,6 +68,16 @@ Klipper can start in an expected MCU-unavailable state while Moonraker and
 Mainsail remain testable. Run **Configure Termux bridge** again after granting
 USB access to replace offline mode with the real UUID.
 
+The dashboard shows the phone's preferred Wi-Fi/Ethernet IPv4 address and the
+corresponding Mainsail URL below System status. Tap it to copy the address.
+Moonraker advertises `klipper-android.local` through its built-in Zeroconf
+component by default. Change the label under **Settings → Network identity**;
+the app validates it, updates `moonraker.conf` through `kabctl`, and restarts
+Moonraker when it is already running. The companion bridge service holds an
+Android Wi-Fi multicast lock while active so mDNS remains reliable despite
+Android's multicast filtering. Direct IP access remains available on networks
+that block client-to-client multicast.
+
 On a fresh Termux installation, `allow-external-apps = true` must still be
 confirmed once inside Termux before Android is allowed to invoke the installer.
 The wizard's **Copy enable command and open Termux** action copies an idempotent
@@ -92,7 +102,8 @@ JDK, or Gradle requirement.
 
 On the phone, the APK has no SDK dependency. The installer uses native Termux
 packages: Git, Python, Clang, Make, libffi/OpenSSL/zlib, curl/unzip, and
-`termux-services`; nginx is added for Mainsail. The C bridge itself can be
+`termux-services`; `iproute2` supplies network information to Moonraker, and
+nginx is added for Mainsail. The C bridge itself can be
 compiled directly with `bridge/build-termux.sh`, avoiding CMake and Ninja.
 
 The installer keeps its executables under `~/.local/bin` and creates managed
@@ -146,6 +157,9 @@ Moonraker also uses a small compatibility launcher. On Android devices where
 SELinux exposes but denies enumeration of `/sys/class/hwmon`, it treats that
 directory as empty and uses Moonraker's normal `thermal_zone0` fallback. Other
 filesystem permission errors are not suppressed.
+The managed nginx proxy preserves Mainsail's original `Host` header when
+forwarding API and websocket traffic. This lets Moonraker validate the
+same-origin websocket without opening broad CORS access.
 
 ## Operational requirements
 

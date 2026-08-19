@@ -34,7 +34,8 @@ After attaching the board and granting USB access, configure the bridge again
 and restart the stack.
 
 `kabctl doctor` checks both Moonraker directly on port 7125 and through the
-Mainsail nginx proxy. If either fails, inspect `kabctl logs moonraker` and
+Mainsail nginx proxy, including an actual websocket upgrade. If either fails,
+inspect `kabctl logs moonraker` and
 `~/printer_data/logs/nginx-error.log`.
 
 Moonraker does not need a working Klipper connection to serve its API or file
@@ -58,6 +59,16 @@ UPDATE to install Moonraker's Android compatibility launcher.
 ## MCU disconnects with the screen off
 
 Disable battery optimization for Termux and the companion app. Some vendors impose additional background restrictions even on foreground services. Keep the phone powered and test the exact model before unattended printing.
+
+## `klipper-android.local` does not resolve
+
+- Keep the companion bridge service running so it can hold Android's Wi-Fi
+  multicast lock.
+- Confirm the phone and client are on the same LAN; guest Wi-Fi commonly blocks
+  multicast and peer-to-peer traffic.
+- Run `kabctl hostname klipper-android` to reapply the default and restart
+  Moonraker, or use **Settings → Network identity** in the app.
+- Use the direct LAN URL shown on the dashboard when mDNS is unavailable.
 
 ## App cannot start the Termux stack
 

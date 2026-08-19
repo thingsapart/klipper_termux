@@ -34,6 +34,11 @@
     <string name="mainsail_address">Mainsail address</string>
     <string name="mainsail_address_description">Address served by the Termux web stack. For security, the embedded view accepts loopback addresses only.</string>
     <string name="mainsail_url_hint">http://127.0.0.1:8080/</string>
+    <string name="lan_address_unavailable">LAN · address unavailable</string>
+    <string name="network_identity">Network identity</string>
+    <string name="mdns_hostname_description">Advertise Mainsail on the local network through Moonraker mDNS. Applying the name updates Termux and restarts Moonraker if it is running.</string>
+    <string name="mdns_hostname_hint">klipper-android</string>
+    <string name="apply_hostname">Apply hostname</string>
     <string name="get_termux">Get Termux</string>
     <string name="get_termux_description">Install Termux from F-Droid or the official GitHub repository. Do not mix Termux apps or plugins from different sources because their signatures differ.</string>
     <string name="termux_download_url_hint">Termux download URL</string>

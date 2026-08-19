@@ -35,6 +35,15 @@ class DeviceRepository(context: Context) {
         return normalized
     }
 
+    fun mdnsHostname(): String = preferences.getString("mdns_hostname", MdnsHostname.DEFAULT)
+        ?: MdnsHostname.DEFAULT
+
+    fun setMdnsHostname(raw: String): String {
+        val normalized = MdnsHostname.normalize(raw)
+        preferences.edit().putString("mdns_hostname", normalized).apply()
+        return normalized
+    }
+
     fun termuxDownloadUrl(default: String): String =
         preferences.getString("termux_download_url", default) ?: default
 
