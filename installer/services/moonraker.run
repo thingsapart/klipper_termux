@@ -2,7 +2,7 @@
 exec 2>&1
 mkdir -p "@DATA_DIR@/logs"
 export PYTHONPATH="@HOME@/moonraker"
-exec "@HOME@/moonraker-env/bin/python" -m moonraker \
+exec "@HOME@/moonraker-env/bin/python" "@HOME@/.local/bin/moonraker-android.py" \
   -d "@DATA_DIR@" \
   -c "@DATA_DIR@/config/moonraker.conf" \
   -l "@DATA_DIR@/logs/moonraker.log"

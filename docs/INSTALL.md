@@ -142,6 +142,10 @@ that ignores only Android's denial of `chmod(0660)` on a Klipper-created
 The optional Klipper G-code terminal is published below Termux's writable
 `$PREFIX/var/run/klipper-android` directory instead of upstream's hard-coded
 `/tmp/printer` path.
+Moonraker also uses a small compatibility launcher. On Android devices where
+SELinux exposes but denies enumeration of `/sys/class/hwmon`, it treats that
+directory as empty and uses Moonraker's normal `thermal_zone0` fallback. Other
+filesystem permission errors are not suppressed.
 
 ## Operational requirements
 

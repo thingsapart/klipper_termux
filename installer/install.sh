@@ -107,6 +107,7 @@ MANAGED_TREES=(
 MANAGED_FILES=(
   "$BIN_DIR/klipper-android-bridge"
   "$BIN_DIR/klippy-android.py"
+  "$BIN_DIR/moonraker-android.py"
   "$BIN_DIR/klipper-android-runner"
   "$BIN_DIR/kabctl"
 )
@@ -309,6 +310,9 @@ repair_existing_service() {
 if (( UPDATE )); then
   log "Repairing generated launchers and existing services"
   render_template "$SOURCE_DIR/installer/klippy-android.py" "$BIN_DIR/klippy-android.py" 1
+  if (( INSTALL_MOONRAKER )); then
+    render_template "$SOURCE_DIR/installer/moonraker-android.py" "$BIN_DIR/moonraker-android.py" 1
+  fi
   repair_existing_service "klipper-android-bridge" "$SOURCE_DIR/installer/services/bridge.run"
   repair_existing_service "klipper" "$SOURCE_DIR/installer/services/klipper.run"
   if (( INSTALL_MOONRAKER )); then
@@ -411,6 +415,9 @@ fi
 
 log "Creating configuration and runit services"
 render_template "$SOURCE_DIR/installer/klippy-android.py" "$BIN_DIR/klippy-android.py" 1
+if (( INSTALL_MOONRAKER )); then
+  render_template "$SOURCE_DIR/installer/moonraker-android.py" "$BIN_DIR/moonraker-android.py" 1
+fi
 render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example" 1
 render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
 if [[ ! -e "$DATA_DIR/config/printer.cfg" ]]; then
@@ -443,7 +450,9 @@ install_service() {
   render_template "$SOURCE_DIR/installer/services/log.run" "$directory/log/run" 1
   unset CURRENT_SERVICE
   run chmod 0755 "$directory/run" "$directory/log/run"
-  (( is_new )) && run touch "$directory/down"
+  if (( is_new )); then
+    run touch "$directory/down"
+  fi
 }
 install_service "klipper-android-bridge" "$SOURCE_DIR/installer/services/bridge.run"
 install_service "klipper" "$SOURCE_DIR/installer/services/klipper.run"

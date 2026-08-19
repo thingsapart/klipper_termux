@@ -42,6 +42,8 @@ manager. A missing MCU should show as a Klipper connection error in Mainsail,
 not make port 7125 unavailable. If the Moonraker service is repeatedly
 restarting, `kabctl logs moonraker` includes both Moonraker's own log and the
 runit process log so startup/import errors are visible.
+If an older installation reports `Permission denied: /sys/class/hwmon`, run
+UPDATE to install Moonraker's Android compatibility launcher.
 
 ## Klipper cannot open the PTY
 

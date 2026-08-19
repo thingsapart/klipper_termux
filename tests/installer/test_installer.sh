@@ -39,6 +39,36 @@ rendered_moonraker_service="$(sed \
 sh -n - <<<"$rendered_moonraker_service"
 grep -q 'PYTHONPATH="/data/data/com.termux/files/home/moonraker"' \
   <<<"$rendered_moonraker_service"
+grep -q '/.local/bin/moonraker-android.py' <<<"$rendered_moonraker_service"
+
+moonraker_wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-moonraker-wrapper.XXXXXX")"
+mkdir -p "$moonraker_wrapper_home/moonraker" "$moonraker_wrapper_home/python-hooks"
+cp "$ROOT/installer/moonraker-android.py" "$moonraker_wrapper_home/moonraker-android.py"
+cat >"$moonraker_wrapper_home/python-hooks/sitecustomize.py" <<'PY'
+import os
+def denied_scandir(path):
+    raise PermissionError(path)
+os.scandir = denied_scandir
+PY
+touch "$moonraker_wrapper_home/moonraker/__init__.py"
+cat >"$moonraker_wrapper_home/moonraker/__main__.py" <<'PY'
+import os
+assert list(os.scandir("/sys/class/hwmon/")) == []
+print("Android hwmon denial handled")
+PY
+PYTHONPATH="$moonraker_wrapper_home/python-hooks:$moonraker_wrapper_home" \
+  python3 "$moonraker_wrapper_home/moonraker-android.py" \
+  | grep -q 'Android hwmon denial handled'
+cat >"$moonraker_wrapper_home/moonraker/__main__.py" <<'PY'
+import os
+list(os.scandir("/tmp/not-android-hwmon"))
+PY
+if PYTHONPATH="$moonraker_wrapper_home/python-hooks:$moonraker_wrapper_home" \
+    python3 "$moonraker_wrapper_home/moonraker-android.py" >/dev/null 2>&1; then
+  echo "Moonraker wrapper unexpectedly ignored an unrelated scandir failure" >&2
+  exit 1
+fi
+rm -rf "$moonraker_wrapper_home"
 
 wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-klippy-wrapper.XXXXXX")"
 mkdir -p "$wrapper_home/klipper/klippy" "$wrapper_home/python-hooks"
@@ -105,6 +135,7 @@ grep -q 'allow-external-apps = true' <<<"$output"
 grep -q 'fetch --depth=1 --no-tags origin' <<<"$output"
 grep -q 'pip install --no-cache-dir' <<<"$output"
 grep -q 'klippy-android.py' <<<"$output"
+grep -q 'moonraker-android.py' "$ROOT/installer/install.sh"
 if grep -q 'Installing native Moonraker' <<<"$output"; then
   echo "--klipper-only unexpectedly installed Moonraker" >&2
   exit 1
@@ -142,4 +173,8 @@ grep -q 'mainsail.new.' <<<"$full_update_output"
 grep -q 'Mainsail archive did not contain index.html' "$ROOT/installer/install.sh"
 grep -q 'restart-after-update' "$ROOT/installer/install.sh"
 grep -q 'installer.log' "$ROOT/installer/install.sh"
+if grep -q '(( is_new )) &&' "$ROOT/installer/install.sh"; then
+  echo "install_service still returns failure for an existing service" >&2
+  exit 1
+fi
 echo "test_installer: ok"

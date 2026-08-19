@@ -54,6 +54,9 @@ case "${1:-status}" in
     check "Klipper Python environment" test -x "$HOME_DIR/klippy-env/bin/python"
     check "Klipper Android launcher" test -f "$HOME_DIR/.local/bin/klippy-android.py"
     check "Klipper printer configuration" test -f "$DATA_DIR/config/printer.cfg"
+    if [[ -d "$PREFIX/var/service/moonraker" ]]; then
+      check "Moonraker Android launcher" test -f "$HOME_DIR/.local/bin/moonraker-android.py"
+    fi
     check "runit service directory" test -d "$PREFIX/var/service"
     for service in "${SERVICES[@]}"; do
       check "$service service is running" service_is_up "$service"
