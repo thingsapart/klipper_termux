@@ -14,6 +14,7 @@
 struct kab_device_config {
     char alias[KAB_ALIAS_SIZE];
     uint8_t device_id[KAB_DEVICE_ID_SIZE];
+    int online;
     uint32_t baud;
     uint8_t data_bits;
     uint8_t stop_bits;
@@ -38,4 +39,3 @@ int kab_config_load(const char *path, struct kab_config *config,
                     char *error, size_t error_size);
 
 #endif
-

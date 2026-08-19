@@ -2,25 +2,73 @@
 set -euo pipefail
 DATA_DIR="@DATA_DIR@"
 PREFIX="@PREFIX@"
+HOME_DIR="@HOME@"
+WEB_PORT="@WEB_PORT@"
+SERVICES=(@SERVICES@)
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  COLOR_OK=$'\033[1;32m'
+  COLOR_FAIL=$'\033[1;31m'
+  COLOR_RESET=$'\033[0m'
+else
+  COLOR_OK=""
+  COLOR_FAIL=""
+  COLOR_RESET=""
+fi
+
+check() {
+  local label="$1" output
+  shift
+  if output=$("$@" 2>&1); then
+    printf '%s[ok]%s   %s\n' "$COLOR_OK" "$COLOR_RESET" "$label"
+  else
+    printf '%s[FAIL]%s %s\n' "$COLOR_FAIL" "$COLOR_RESET" "$label"
+    [[ -n "$output" ]] && printf '       %s\n' "$output"
+    failures=$((failures + 1))
+  fi
+}
+
+service_is_up() {
+  SVDIR="$PREFIX/var/service" sv status "$1" 2>/dev/null | grep -q '^run:'
+}
 
 case "${1:-status}" in
   start|stop|monitor|enable|disable)
     exec "@HOME@/.local/bin/klipper-android-runner" "$@"
     ;;
   status)
-    sv status klipper-android-bridge klipper moonraker klipper-web 2>/dev/null || true
+    SVDIR="$PREFIX/var/service" sv status "${SERVICES[@]}" 2>/dev/null || true
     ;;
   doctor)
     failures=0
-    check() { if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*"; failures=$((failures + 1)); fi; }
-    check test -x "@HOME@/.local/bin/klipper-android-bridge"
-    check test -f "$DATA_DIR/config/bridge.conf"
+    check "native bridge executable" test -x "$HOME_DIR/.local/bin/klipper-android-bridge"
+    check "bridge configuration exists" test -f "$DATA_DIR/config/bridge.conf"
     if [[ -f "$DATA_DIR/config/bridge.conf" ]]; then
-      check "@HOME@/.local/bin/klipper-android-bridge" --check-config "$DATA_DIR/config/bridge.conf"
+      check "bridge configuration is valid" \
+        "$HOME_DIR/.local/bin/klipper-android-bridge" --check-config "$DATA_DIR/config/bridge.conf"
     fi
-    check test -x "@HOME@/klippy-env/bin/python"
-    check test -f "$DATA_DIR/config/printer.cfg"
-    check test -d "$PREFIX/var/service"
+    check "Klipper Python environment" test -x "$HOME_DIR/klippy-env/bin/python"
+    check "Klipper printer configuration" test -f "$DATA_DIR/config/printer.cfg"
+    check "runit service directory" test -d "$PREFIX/var/service"
+    for service in "${SERVICES[@]}"; do
+      check "$service service is running" service_is_up "$service"
+    done
+    check "bridge PTY is published" test -e "$PREFIX/var/run/klipper-android/main"
+    if [[ -d "$PREFIX/var/service/moonraker" ]]; then
+      check "Moonraker API on port 7125" \
+        curl -fsS --max-time 2 http://127.0.0.1:7125/server/info
+    fi
+    if [[ -d "$PREFIX/var/service/klipper-web" ]]; then
+      check "Mainsail static application" test -f "$HOME_DIR/mainsail/index.html"
+      check "Mainsail proxy can reach Moonraker" \
+        curl -fsS --max-time 2 "http://127.0.0.1:$WEB_PORT/server/info"
+    fi
+    if (( failures )); then
+      printf '\n%s[FAIL]%s doctor found %d problem(s)\n' \
+        "$COLOR_FAIL" "$COLOR_RESET" "$failures"
+    else
+      printf '\n%s[ok]%s all checks passed\n' "$COLOR_OK" "$COLOR_RESET"
+    fi
     exit "$failures"
     ;;
   logs)
@@ -29,7 +77,7 @@ case "${1:-status}" in
     ;;
   restart)
     shift
-    exec sv restart "${@:-klipper-android-bridge klipper moonraker klipper-web}"
+    if (($#)); then exec sv restart "$@"; else exec sv restart "${SERVICES[@]}"; fi
     ;;
   *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|restart [services...]}" >&2; exit 2 ;;
 esac

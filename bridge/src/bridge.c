@@ -304,6 +304,7 @@ static void disconnect_session(struct kab_session *session, const char *reason) 
 
 static int retry_connect(const struct kab_config *global, struct kab_session *session,
                          uint64_t now) {
+    if (!session->config->online) return 0;
     if (session->socket_fd >= 0 || now < session->reconnect_at_ms) return 0;
     char message[256] = {0};
     int result = open_remote(global, session, message, sizeof(message));
@@ -424,8 +425,9 @@ static int run_bridge(const struct kab_config *config) {
                      strerror(errno));
             return 1;
         }
-        log_line("INFO", config->devices[index].alias, "PTY %s -> %s",
-                 config->devices[index].pty_link, sessions[index].pty_slave);
+        log_line("INFO", config->devices[index].alias, "PTY %s -> %s%s",
+                 config->devices[index].pty_link, sessions[index].pty_slave,
+                 config->devices[index].online ? "" : " (offline mode)");
     }
 
     uint64_t next_stats = monotonic_ms() + (uint64_t)config->log_interval_seconds * 1000u;

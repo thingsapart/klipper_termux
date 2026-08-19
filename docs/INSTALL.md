@@ -60,9 +60,13 @@ in Termux** button that sends that fixed command through the same permission gat
 Installation runs in a visible Termux terminal so progress and download or
 package-manager errors are not hidden; stack start/stop/status commands remain
 background commands.
-The bridge step can place the app's token and listener port into Termux's
-`~/printer_data/config/bridge.conf` through the permission-gated command API.
-The USB device UUID still must be learned after attaching the printer.
+The bridge step can place the app's token, listener port, and selected USB UUID
+into Termux's `~/printer_data/config/bridge.conf` through the permission-gated
+command API. With no permitted USB device attached it writes `offline` instead.
+The native bridge then publishes a PTY without attempting a USB connection, so
+Klipper can start in an expected MCU-unavailable state while Moonraker and
+Mainsail remain testable. Run **Configure Termux bridge** again after granting
+USB access to replace offline mode with the real UUID.
 
 On a fresh Termux installation, `allow-external-apps = true` must still be
 confirmed once inside Termux before Android is allowed to invoke the installer.
@@ -91,6 +95,11 @@ packages: Git, Python, Clang, Make, libffi/OpenSSL/zlib, curl/unzip, and
 `termux-services`; nginx is added for Mainsail. The C bridge itself can be
 compiled directly with `bridge/build-termux.sh`, avoiding CMake and Ninja.
 
+The installer keeps its executables under `~/.local/bin` and creates managed
+links for `kabctl`, `klipper-android-runner`, and `klipper-android-bridge` in
+`$PREFIX/bin`. Termux already includes that directory in `PATH`, so the commands
+work immediately without editing `.bashrc`, `.zshrc`, or the current shell.
+
 The eventual convenience form is:
 
 ```sh
@@ -106,12 +115,14 @@ history. Python dependencies use pip without retaining downloaded-wheel caches,
 and the Mainsail archive is deleted after extraction.
 
 Rerunning the installer detects an existing managed installation and asks for
-the exact word `DELETE` in the Termux terminal before replacing it. Reinstall
-removes the managed source trees, virtual environments, Mainsail files, runit
-services, logs, gcodes, database, and printer configuration. It preserves
-Termux packages, `~/.termux/termux.properties`, and unrelated files. Automation
-may pass `--reinstall` as explicit authorization; `--non-interactive` alone
-refuses to delete an existing installation.
+`UPDATE` or `DELETE` in the Termux terminal. Update stops the running stack,
+refreshes shallow source checkouts, virtual environments, generated service
+scripts, bridge utilities, and Mainsail, then restarts the stack if it was
+previously running. It preserves printer configuration, gcodes, database, and
+logs. Delete performs a clean reinstall and removes all of those managed files.
+Both modes preserve Termux packages, `~/.termux/termux.properties`, and
+unrelated files. Automation may pass `--update` or `--reinstall` explicitly;
+`--non-interactive` without either mode refuses to change an existing install.
 
 ## Operational requirements
 

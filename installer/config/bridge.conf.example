@@ -1,7 +1,7 @@
-# Copy to bridge.conf, then replace TOKEN and DEVICE_UUID from the Android app.
+# Offline mode publishes the PTY without requiring an attached printer MCU.
+# The Android app replaces "offline" with the selected device UUID when available.
 server=127.0.0.1
 port=27831
 token=TOKEN
 log_interval=60
-device=main,DEVICE_UUID,250000,8,1,none,none,@PREFIX@/var/run/klipper-android/main
-
+device=main,offline,250000,8,1,none,none,@PREFIX@/var/run/klipper-android/main

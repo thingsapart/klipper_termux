@@ -409,13 +409,28 @@ class MainActivity : Activity() {
     }
 
     private fun sendPairingToTermux() {
+        val configuredDevice = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+            .firstNotNullOfOrNull { driver ->
+                if (!usbManager.hasPermission(driver.device)) return@firstNotNullOfOrNull null
+                driver.ports.firstNotNullOfOrNull { port ->
+                    repository.profileFor(driver.device, port.portNumber, create = true)?.id
+                }
+            }
         val result = TermuxRunner.configureBridge(
             this,
             repository.token().toHex(),
             repository.port(),
+            configuredDevice?.toString(),
         )
         if (result == TermuxRunner.Result.SENT) repository.markPairingSent()
-        handleTermuxResult(result, "Bridge token and port sent to Termux")
+        handleTermuxResult(
+            result,
+            if (configuredDevice == null) {
+                "Bridge configured in offline mode"
+            } else {
+                "Bridge token and device sent to Termux"
+            },
+        )
         renderWizard()
     }
 

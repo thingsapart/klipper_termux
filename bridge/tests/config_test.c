@@ -23,7 +23,8 @@ int main(void) {
           "port=27831\n"
           "token=000102030405060708090a0b0c0d0e0f"
           "101112131415161718191a1b1c1d1e1f\n"
-          "device=main,00112233-4455-6677-8899-aabbccddeeff,250000,8,1,none,rts,/tmp/mcu\n",
+          "device=main,00112233-4455-6677-8899-aabbccddeeff,250000,8,1,none,rts,/tmp/mcu\n"
+          "device=test,offline,250000,8,1,none,none,/tmp/offline-mcu\n",
           file);
     assert(fclose(file) == 0);
 
@@ -31,12 +32,14 @@ int main(void) {
     char error[256];
     assert(kab_config_load(path, &config, error, sizeof(error)) == 0);
     assert(config.port == 27831);
-    assert(config.device_count == 1);
+    assert(config.device_count == 2);
     assert(!strcmp(config.devices[0].alias, "main"));
+    assert(config.devices[0].online);
     assert(config.devices[0].baud == 250000);
     assert(config.devices[0].flags == KAB_FLAG_RTS);
     assert(config.devices[0].device_id[0] == 0x00);
     assert(config.devices[0].device_id[15] == 0xff);
+    assert(!config.devices[1].online);
     unlink(path);
     puts("config_test: ok");
     return 0;

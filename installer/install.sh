@@ -7,11 +7,13 @@ INSTALL_UI=1
 INSTALL_MOONRAKER=1
 NON_INTERACTIVE=0
 REINSTALL=0
+UPDATE=0
 DRY_RUN=0
 ENABLE_APP_CONTROL=1
 SOURCE_DIR=""
 INSTANCE="printer"
 WEB_PORT=8080
+RESTART_AFTER_UPDATE=0
 
 usage() {
   cat <<'EOF'
@@ -22,7 +24,8 @@ Usage: install.sh [options]
   --instance NAME      Instance name (default: printer)
   --port NUMBER        Mainsail HTTP port (default: 8080)
   --source-dir PATH    Use an existing project checkout
-  --non-interactive    Accept defaults; fail rather than delete an existing install
+  --non-interactive    Accept defaults; fail on an existing install without a mode
+  --update             Refresh software while preserving printer data and configuration
   --reinstall          Remove an existing managed installation without prompting
   --dry-run            Print commands without changing the system
   --no-app-control     Do not allow the companion app to run Termux commands
@@ -46,6 +49,7 @@ while (($#)); do
     --port) shift; WEB_PORT="${1:-}" ;;
     --source-dir) shift; SOURCE_DIR="${1:-}" ;;
     --non-interactive) NON_INTERACTIVE=1 ;;
+    --update) UPDATE=1 ;;
     --reinstall) REINSTALL=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --no-app-control) ENABLE_APP_CONTROL=0 ;;
@@ -56,6 +60,7 @@ while (($#)); do
 done
 
 [[ "$CHANNEL" == stable || "$CHANNEL" == edge ]] || die "channel must be stable or edge"
+(( !(UPDATE && REINSTALL) )) || die "--update and --reinstall are mutually exclusive"
 [[ "$INSTANCE" =~ ^[a-zA-Z0-9_-]+$ ]] || die "invalid instance name"
 [[ "$WEB_PORT" =~ ^[0-9]+$ ]] && (( WEB_PORT >= 1024 && WEB_PORT <= 65535 )) ||
   die "port must be between 1024 and 65535"
@@ -92,6 +97,11 @@ MANAGED_FILES=(
   "$BIN_DIR/klipper-android-bridge"
   "$BIN_DIR/klipper-android-runner"
   "$BIN_DIR/kabctl"
+)
+MANAGED_LINKS=(
+  "$PREFIX/bin/klipper-android-bridge"
+  "$PREFIX/bin/klipper-android-runner"
+  "$PREFIX/bin/kabctl"
 )
 
 if (( ! DRY_RUN )); then
@@ -140,23 +150,53 @@ purge_existing_installation() {
     case "$path" in "$BIN_DIR"/*) ;; *) die "refusing unsafe removal path: $path" ;; esac
     run rm -f -- "$path"
   done
+  for path in "${MANAGED_LINKS[@]}"; do
+    target="$BIN_DIR/${path##*/}"
+    if [[ -L "$path" && "$(readlink "$path")" == "$target" ]]; then
+      run rm -f -- "$path"
+    fi
+  done
 }
 
 if has_existing_installation; then
-  if (( ! REINSTALL )); then
+  if (( ! REINSTALL && ! UPDATE )); then
     if (( NON_INTERACTIVE )); then
-      die "an existing installation was found; rerun interactively or pass --reinstall"
+      die "an existing installation was found; rerun interactively or pass --update or --reinstall"
     fi
     printf '\nAn existing Klipper Android installation was found.\n'
-    printf 'This will permanently remove its Klipper/Moonraker environments, Mainsail,\n'
-    printf 'services, logs, gcodes, database, and printer configuration under:\n  %s\n' "$DATA_DIR"
-    printf 'Termux packages and unrelated Termux files will be preserved.\n'
-    printf 'Type DELETE to continue: '
-    [[ -r /dev/tty ]] || die "confirmation requires a terminal; rerun with --reinstall to authorize deletion"
+    printf '  UPDATE  refreshes software and preserves configuration, gcodes, database, and logs.\n'
+    printf '  DELETE  permanently removes the complete managed installation under:\n  %s\n' "$DATA_DIR"
+    printf 'Both modes preserve Termux packages and unrelated Termux files.\n'
+    printf 'Type UPDATE or DELETE to continue: '
+    [[ -r /dev/tty ]] || die "confirmation requires a terminal; rerun with --update or --reinstall"
     read -r confirmation </dev/tty
-    [[ "$confirmation" == DELETE ]] || die "reinstall cancelled"
+    case "$confirmation" in
+      UPDATE) UPDATE=1 ;;
+      DELETE) REINSTALL=1 ;;
+      *) die "installation change cancelled" ;;
+    esac
   fi
-  purge_existing_installation
+  if (( REINSTALL )); then
+    purge_existing_installation
+  else
+    log "Updating managed software; printer data and configuration will be preserved"
+    if (( DRY_RUN )); then
+      printf '+ stop managed services before update (if running)\n'
+    elif command -v sv >/dev/null 2>&1; then
+      for service in klipper-android-bridge klipper moonraker klipper-web; do
+        if SVDIR="$SERVICE_ROOT" sv status "$service" 2>/dev/null | grep -q '^run:'; then
+          RESTART_AFTER_UPDATE=1
+        fi
+      done
+      SVDIR="$SERVICE_ROOT" sv down \
+        klipper-web moonraker klipper klipper-android-bridge >/dev/null 2>&1 || true
+    fi
+    # These are generated/replaceable artifacts. Recreate them to avoid stale
+    # Python packages or static UI files while leaving DATA_DIR untouched.
+    run rm -rf -- "$KLIPPER_ENV"
+    (( INSTALL_MOONRAKER )) && run rm -rf -- "$MOONRAKER_ENV"
+    (( INSTALL_UI )) && run rm -rf -- "$MAINSAIL_DIR"
+  fi
 fi
 
 log "Installing native Termux dependencies"
@@ -178,6 +218,7 @@ if [[ -z "$SOURCE_DIR" ]]; then
   else
     log "Downloading bridge source"
     run mkdir -p "$(dirname "$SOURCE_INSTALL_DIR")"
+    [[ ! -e "$SOURCE_INSTALL_DIR" ]] || run rm -rf -- "$SOURCE_INSTALL_DIR"
     run git clone --depth=1 --single-branch --no-tags "$REPOSITORY" "$SOURCE_INSTALL_DIR"
   fi
   SOURCE_DIR="$SOURCE_INSTALL_DIR"
@@ -196,11 +237,16 @@ run install -m 0755 "$BRIDGE_OUTPUT" "$BIN_DIR/klipper-android-bridge"
 
 shallow_checkout() {
   local repository="$1" destination="$2" revision="$3"
-  run mkdir -p "$destination"
-  run git -C "$destination" init -q
-  run git -C "$destination" remote add origin "$repository"
+  if [[ -d "$destination/.git" ]]; then
+    run git -C "$destination" remote set-url origin "$repository"
+  else
+    [[ ! -e "$destination" ]] || run rm -rf -- "$destination"
+    run mkdir -p "$destination"
+    run git -C "$destination" init -q
+    run git -C "$destination" remote add origin "$repository"
+  fi
   run git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
-  run git -C "$destination" checkout --detach FETCH_HEAD
+  run git -C "$destination" checkout --detach --force FETCH_HEAD
 }
 
 log "Installing native Klipper"
@@ -220,8 +266,8 @@ if (( INSTALL_MOONRAKER )); then
 fi
 
 render_template() {
-  local source="$1" destination="$2"
-  if [[ -e "$destination" ]]; then return 0; fi
+  local source="$1" destination="$2" force="${3:-0}"
+  if [[ -e "$destination" && "$force" != 1 ]]; then return 0; fi
   if (( DRY_RUN )); then printf '+ render %s -> %s\n' "$source" "$destination"; return 0; fi
   sed -e "s|@PREFIX@|$PREFIX|g" \
       -e "s|@HOME@|$TERMUX_HOME|g" \
@@ -234,8 +280,8 @@ render_template() {
 }
 
 log "Creating configuration and runit services"
-render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example"
-render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example"
+render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example" 1
+render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
 if [[ ! -e "$DATA_DIR/config/printer.cfg" ]]; then
   run cp "$DATA_DIR/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg"
 fi
@@ -249,8 +295,8 @@ install_service() {
   [[ ! -d "$directory" ]] && is_new=1
   run mkdir -p "$directory/log"
   CURRENT_SERVICE="$name"
-  render_template "$template" "$directory/run"
-  render_template "$SOURCE_DIR/installer/services/log.run" "$directory/log/run"
+  render_template "$template" "$directory/run" 1
+  render_template "$SOURCE_DIR/installer/services/log.run" "$directory/log/run" 1
   unset CURRENT_SERVICE
   run chmod 0755 "$directory/run" "$directory/log/run"
   (( is_new )) && run touch "$directory/down"
@@ -287,9 +333,23 @@ fi
 SERVICE_NAMES="klipper-android-bridge klipper"
 (( INSTALL_MOONRAKER )) && SERVICE_NAMES+=" moonraker"
 (( INSTALL_UI )) && SERVICE_NAMES+=" klipper-web"
-render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl"
-render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner"
+render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
+render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
 run chmod 0755 "$BIN_DIR/kabctl" "$BIN_DIR/klipper-android-runner"
+
+install_command_link() {
+  local name="$1" target="$BIN_DIR/$1" link="$PREFIX/bin/$1"
+  if [[ -e "$link" && ! -L "$link" ]]; then
+    die "refusing to replace existing command: $link"
+  fi
+  if [[ -L "$link" && "$(readlink "$link")" != "$target" ]]; then
+    die "refusing to replace unrelated command link: $link"
+  fi
+  run ln -sfn "$target" "$link"
+}
+install_command_link klipper-android-bridge
+install_command_link klipper-android-runner
+install_command_link kabctl
 
 if (( ENABLE_APP_CONTROL )); then
   log "Enabling permission-gated companion app control"
@@ -315,6 +375,11 @@ if (( ! DRY_RUN )); then
     git -C "$KLIPPER_DIR" rev-parse HEAD | sed 's/^/klipper_commit=/'
     (( INSTALL_MOONRAKER )) && git -C "$MOONRAKER_DIR" rev-parse HEAD | sed 's/^/moonraker_commit=/'
   } >"$MANIFEST"
+fi
+
+if (( UPDATE && RESTART_AFTER_UPDATE )); then
+  log "Restarting the updated stack"
+  run "$BIN_DIR/klipper-android-runner" start
 fi
 
 log "Installation complete"

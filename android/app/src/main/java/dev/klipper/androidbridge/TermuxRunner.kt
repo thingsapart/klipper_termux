@@ -38,14 +38,24 @@ object TermuxRunner {
             commandDescription = "Install Klipper, Moonraker, Mainsail, and bridge services",
         )
 
-    fun configureBridge(context: Context, tokenHex: String, port: Int): Result {
+    fun configureBridge(
+        context: Context,
+        tokenHex: String,
+        port: Int,
+        deviceUuid: String? = null,
+    ): Result {
         require(tokenHex.matches(Regex("[0-9a-f]{64}")))
         require(port in 1..65535)
+        require(deviceUuid == null || deviceUuid.matches(
+            Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"),
+        ))
         val config = "$HOME/printer_data/config/bridge.conf"
         val example = "$HOME/printer_data/config/bridge.conf.example"
+        val device = deviceUuid ?: "offline"
         val command = "set -eu; mkdir -p '$HOME/printer_data/config'; " +
             "if [ ! -f '$config' ]; then cp '$example' '$config'; fi; " +
-            "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/' '$config'"
+            "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/; " +
+            "s/^device=main,[^,]*/device=main,$device/' '$config'"
         return dispatch(context, SHELL, arrayOf("-lc", command))
     }
 

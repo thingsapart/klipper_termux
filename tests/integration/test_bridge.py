@@ -145,6 +145,29 @@ def main() -> int:
         if process.returncode not in (0, -15):
             print(process.stderr.read(), file=sys.stderr)
             return 1
+
+        offline_link = root / "offline-mcu"
+        offline_config = root / "offline-bridge.conf"
+        offline_config.write_text(
+            "server=127.0.0.1\n"
+            "port=27831\n"
+            f"token={TOKEN.hex()}\n"
+            "log_interval=0\n"
+            f"device=main,offline,250000,8,1,none,none,{offline_link}\n",
+            encoding="utf-8",
+        )
+        offline_process = subprocess.Popen(
+            [str(bridge), str(offline_config)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            wait_for_path(offline_link)
+            assert offline_process.poll() is None, "offline bridge exited unexpectedly"
+        finally:
+            offline_process.terminate()
+            offline_process.wait(timeout=3)
     print("test_bridge: ok")
     return 0
 

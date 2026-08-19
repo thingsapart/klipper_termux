@@ -67,7 +67,7 @@
     <string name="install_in_termux">Install Klipper in Termux</string>
     <string name="reinstall_in_termux">Reinstall Klipper in Termux</string>
     <string name="installer_not_published">Set kabInstallerUrl and kabRepositoryUrl when building the APK to enable one-tap installation.</string>
-    <string name="pairing_explanation">This secret authenticates the native Termux bridge to the Android USB service. After installation, paste it into ~/printer_data/config/bridge.conf. Tap below to copy.</string>
+    <string name="pairing_explanation">This secret authenticates the native Termux bridge to the Android USB service. With no USB device attached, configuration uses offline mode so Klipper, Moonraker, and Mainsail can still start. Configure again after granting USB access to select the real device.</string>
     <string name="toggle_bridge_description">Toggle the Android USB bridge</string>
     <string name="toggle_termux_description">Start or stop the Termux Klipper stack</string>
     <string name="usb_status_description">Check or grant USB device permission</string>

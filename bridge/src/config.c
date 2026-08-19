@@ -121,9 +121,13 @@ static int parse_device(char *value, struct kab_config *config,
     }
     strcpy(device->alias, fields[0]);
     strcpy(device->pty_link, fields[7]);
-    if (kab_parse_hex(fields[1], device->device_id, sizeof(device->device_id))) {
+    if (!strcmp(fields[1], "offline") || !strcmp(fields[1], "DEVICE_UUID")) {
+        device->online = 0;
+    } else if (kab_parse_hex(fields[1], device->device_id, sizeof(device->device_id))) {
         snprintf(error, error_size, "line %u: invalid device UUID", line_number);
         return -1;
+    } else {
+        device->online = 1;
     }
     unsigned long number;
     if (parse_unsigned(fields[2], 4000000, &number) || number < 1200) {

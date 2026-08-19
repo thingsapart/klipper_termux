@@ -18,6 +18,19 @@ kabctl status
 
 Regenerate or copy the token from the app and place all 64 hexadecimal characters in `bridge.conf`. Restart `klipper-android-bridge` afterward.
 
+## No printer MCU is attached yet
+
+Run **Configure Termux bridge** with no USB device attached. The app writes an
+`offline` device entry, and the native bridge publishes Klipper's PTY without
+trying to open a USB device. Start the whole stack normally. Klipper will report
+that its MCU is unavailable, but Moonraker and Mainsail should remain reachable.
+After attaching the board and granting USB access, configure the bridge again
+and restart the stack.
+
+`kabctl doctor` checks both Moonraker directly on port 7125 and through the
+Mainsail nginx proxy. If either fails, inspect `kabctl logs moonraker` and
+`~/printer_data/logs/nginx-error.log`.
+
 ## Klipper cannot open the PTY
 
 - Confirm the Android service is running.
