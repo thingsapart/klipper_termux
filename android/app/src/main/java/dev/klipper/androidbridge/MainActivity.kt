@@ -147,6 +147,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_header),
             findViewById(R.id.wizard_install_header),
             findViewById(R.id.wizard_bridge_header),
+            findViewById(R.id.wizard_ssh_header),
             findViewById(R.id.wizard_verify_header),
         )
         wizardBodies = listOf(
@@ -154,6 +155,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_body),
             findViewById(R.id.wizard_install_body),
             findViewById(R.id.wizard_bridge_body),
+            findViewById(R.id.wizard_ssh_body),
             findViewById(R.id.wizard_verify_body),
         )
         wizardStateViews = listOf(
@@ -161,6 +163,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_state),
             findViewById(R.id.wizard_install_state),
             findViewById(R.id.wizard_bridge_state),
+            findViewById(R.id.wizard_ssh_state),
             findViewById(R.id.wizard_verify_state),
         )
         wizardProgress = findViewById(R.id.wizard_progress)
@@ -255,7 +258,18 @@ class MainActivity : Activity() {
             }
         }
         findViewById<Button>(R.id.wizard_send_pairing).setOnClickListener { sendPairingToTermux() }
+        findViewById<Button>(R.id.wizard_create_starter_config).setOnClickListener {
+            handleTermuxResult(
+                TermuxRunner.createStarterConfig(this),
+                "Starter printer.cfg request sent",
+            )
+        }
         findViewById<Button>(R.id.wizard_usb_action).setOnClickListener { prepareUsbBridge() }
+        findViewById<Button>(R.id.wizard_setup_ssh).setOnClickListener { setupSsh() }
+        findViewById<Button>(R.id.wizard_skip_ssh).setOnClickListener {
+            repository.markSshSetupHandled()
+            renderWizard()
+        }
         findViewById<Button>(R.id.wizard_start_stack).setOnClickListener {
             startBridge()
             runTermux("start")
@@ -468,6 +482,22 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun setupSsh() {
+        val result = TermuxRunner.setupSsh(this)
+        if (result == TermuxRunner.Result.SENT) {
+            repository.markSshSetupHandled()
+            handleTermuxResult(result, "SSH setup started — opening Termux")
+            handler.postDelayed({
+                if (!TermuxRunner.openApp(this)) {
+                    Toast.makeText(this, "Open Termux to finish SSH setup", Toast.LENGTH_LONG).show()
+                }
+            }, 400)
+        } else {
+            handleTermuxResult(result, "SSH setup requested")
+        }
+        renderWizard()
+    }
+
     private fun prepareUsbBridge() {
         val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
         when {
@@ -511,6 +541,7 @@ class MainActivity : Activity() {
                 repository.pairingSent() || usbReady -> WizardStatus.ATTEMPTED
                 else -> WizardStatus.PENDING
             },
+            if (repository.sshSetupHandled()) WizardStatus.COMPLETE else WizardStatus.PENDING,
             if (mainsailReady) WizardStatus.COMPLETE else WizardStatus.PENDING,
         )
         val firstPending = statuses.indexOfFirst { it == WizardStatus.PENDING }

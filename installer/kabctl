@@ -4,6 +4,7 @@ DATA_DIR="@DATA_DIR@"
 PREFIX="@PREFIX@"
 HOME_DIR="@HOME@"
 WEB_PORT="@WEB_PORT@"
+STATE_DIR="$HOME_DIR/.local/state/klipper-android"
 SERVICES=(@SERVICES@)
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -84,6 +85,62 @@ set_mdns_hostname() {
   printf 'mDNS hostname set to %s.local\n' "$hostname"
 }
 
+install_starter_config() {
+  local config="$DATA_DIR/config/printer.cfg"
+  local example="$DATA_DIR/config/printer.cfg.example"
+  [[ -f "$example" ]] || { echo "Starter template not found: $example" >&2; return 1; }
+  if [[ -s "$config" ]] && \
+      ! grep -qE '^# (Managed starter configuration for Klipper Android|Replace this example with the configuration)' "$config"; then
+    printf 'Existing printer-specific configuration preserved: %s\n' "$config"
+    return 0
+  fi
+  install -m 0600 "$example" "$config"
+  mkdir -p "$STATE_DIR"
+  touch "$STATE_DIR/starter-config-installed"
+  if [[ -d "$PREFIX/var/service/klipper" ]] && \
+      SVDIR="$PREFIX/var/service" sv status klipper 2>/dev/null | grep -q '^run:'; then
+    SVDIR="$PREFIX/var/service" sv restart klipper
+  fi
+  printf 'Starter printer configuration installed at %s\n' "$config"
+  printf 'Replace it with the printer-specific Klipper configuration before controlling hardware.\n'
+}
+
+setup_ssh() {
+  local config="$PREFIX/etc/ssh/sshd_config" username address
+  printf 'Installing OpenSSH. Existing SSH sessions may disconnect when the server restarts.\n'
+  pkg install -y openssh
+  printf '\nChoose the password for the Termux user (%s).\n' "$(whoami)"
+  passwd
+  if grep -qE '^[#[:space:]]*Port[[:space:]]+' "$config"; then
+    sed -i -E 's/^[#[:space:]]*Port[[:space:]]+.*/Port 2020/' "$config"
+  else
+    printf '\nPort 2020\n' >>"$config"
+  fi
+  if grep -qE '^[#[:space:]]*PasswordAuthentication[[:space:]]+' "$config"; then
+    sed -i -E 's/^[#[:space:]]*PasswordAuthentication[[:space:]]+.*/PasswordAuthentication yes/' "$config"
+  else
+    printf 'PasswordAuthentication yes\n' >>"$config"
+  fi
+  sshd -t
+  mkdir -p "$STATE_DIR"
+  touch "$STATE_DIR/ssh-configured"
+  if [[ -d "$PREFIX/var/service/sshd" ]] && command -v sv-enable >/dev/null 2>&1; then
+    sv-enable sshd >/dev/null
+    SVDIR="$PREFIX/var/service" sv restart sshd
+  else
+    pkill -x sshd >/dev/null 2>&1 || true
+    sshd
+  fi
+  username=$(whoami)
+  address=$(ip -4 -o addr show scope global 2>/dev/null | awk 'NR == 1 { split($4, a, "/"); print a[1] }')
+  printf '\nSSH is listening on port 2020.\n'
+  if [[ -n "$address" ]]; then
+    printf 'Connect with: ssh -p 2020 %s@%s\n' "$username" "$address"
+  else
+    printf 'Connect with: ssh -p 2020 %s@PHONE_LAN_IP\n' "$username"
+  fi
+}
+
 case "${1:-status}" in
   start|stop|monitor|enable|disable)
     exec "@HOME@/.local/bin/klipper-android-runner" "$@"
@@ -110,15 +167,22 @@ case "${1:-status}" in
       check "$service service is running" service_is_up "$service"
     done
     check "bridge PTY is published" test -e "$PREFIX/var/run/klipper-android/main"
+    check "Klipper API socket" test -S "$DATA_DIR/comms/klippy.sock"
     if [[ -d "$PREFIX/var/service/moonraker" ]]; then
       check "Moonraker API on port 7125" \
         curl -fsS --max-time 2 http://127.0.0.1:7125/server/info
+      check "Moonraker connected to Klipper" sh -c \
+        "curl -fsS --max-time 2 http://127.0.0.1:7125/server/info | grep -q '\"klippy_connected\":true'"
     fi
     if [[ -d "$PREFIX/var/service/klipper-web" ]]; then
       check "Mainsail static application" test -f "$HOME_DIR/mainsail/index.html"
       check "Mainsail proxy can reach Moonraker" \
         curl -fsS --max-time 2 "http://127.0.0.1:$WEB_PORT/server/info"
       check "Mainsail websocket proxy" websocket_proxy_works
+    fi
+    if [[ -f "$STATE_DIR/ssh-configured" ]]; then
+      check "SSH server on port 2020" sh -c \
+        "ss -ltn 2>/dev/null | grep -qE '[:.]2020[[:space:]]'"
     fi
     if (( failures )); then
       printf '\n%s[FAIL]%s doctor found %d problem(s)\n' \
@@ -145,9 +209,17 @@ case "${1:-status}" in
     [[ $# -eq 2 ]] || { echo "Usage: kabctl hostname NAME" >&2; exit 2; }
     set_mdns_hostname "$2"
     ;;
+  printer-starter)
+    [[ $# -eq 1 ]] || { echo "Usage: kabctl printer-starter" >&2; exit 2; }
+    install_starter_config
+    ;;
+  ssh-setup)
+    [[ $# -eq 1 ]] || { echo "Usage: kabctl ssh-setup" >&2; exit 2; }
+    setup_ssh
+    ;;
   restart)
     shift
     if (($#)); then exec sv restart "$@"; else exec sv restart "${SERVICES[@]}"; fi
     ;;
-  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|restart [services...]}" >&2; exit 2 ;;
+  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|ssh-setup|restart [services...]}" >&2; exit 2 ;;
 esac

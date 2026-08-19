@@ -85,6 +85,12 @@ class DeviceRepository(context: Context) {
         preferences.edit().putBoolean("external_apps_setup_attempted", true).apply()
     }
 
+    fun sshSetupHandled(): Boolean = preferences.getBoolean("ssh_setup_handled", false)
+
+    fun markSshSetupHandled() {
+        preferences.edit().putBoolean("ssh_setup_handled", true).apply()
+    }
+
     fun profileFor(device: UsbDevice, portNumber: Int, create: Boolean): DeviceProfile? {
         val key = stableKey(device, portNumber)
         val encoded = preferences.getString("device.$key", null)

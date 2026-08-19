@@ -1,4 +1,7 @@
-# Replace this example with the configuration for the actual printer.
+# Managed starter configuration for Klipper Android.
+# This exposes Klipper to Moonraker but does not describe a physical printer.
+# Replace it with the printer/board-specific configuration before moving axes
+# or enabling heaters, retaining the MCU serial path and restart method below.
 [mcu]
 serial: @PREFIX@/var/run/klipper-android/main
 baud: 250000
@@ -9,3 +12,13 @@ kinematics: none
 max_velocity: 1000
 max_accel: 1000
 
+[virtual_sdcard]
+path: @DATA_DIR@/gcodes
+
+[pause_resume]
+
+[display_status]
+
+[respond]
+
+[exclude_object]

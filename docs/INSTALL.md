@@ -12,7 +12,11 @@
    ```
 
 5. Copy `~/printer_data/config/bridge.conf.example` to `bridge.conf`; replace `TOKEN` and `DEVICE_UUID`.
-6. Replace the sample `printer.cfg` with the printer's configuration, retaining the generated MCU PTY path and `restart_method: command`.
+6. Run `kabctl printer-starter` to create a safe API-only `printer.cfg`. It
+   publishes Klipper to Moonraker and enables Mainsail's virtual SD-card,
+   pause/status, response, and object-exclusion components. It does not contain
+   motion or heater pins. Replace it with the printer's real configuration,
+   retaining the generated MCU PTY path and `restart_method: command`.
 7. Run `kabctl doctor`, then start the supervised stack:
 
    ```sh
@@ -67,6 +71,24 @@ The native bridge then publishes a PTY without attempting a USB connection, so
 Klipper can start in an expected MCU-unavailable state while Moonraker and
 Mainsail remain testable. Run **Configure Termux bridge** again after granting
 USB access to replace offline mode with the real UUID.
+**Configure Termux bridge** also asks `kabctl` to install the starter
+configuration when no user-owned `printer.cfg` exists. Existing printer-specific
+configuration is never overwritten. This is enough for Klipper and Moonraker to
+connect and expose configuration editing in Mainsail; connecting a physical
+printer still requires compatible Klipper firmware on the controller and the
+correct board/printer pin configuration.
+
+The setup wizard includes optional SSH access. **Install and configure SSH**
+opens a visible Termux session, installs `openssh`, and runs `passwd` there; the
+Android app never receives the password. It configures and starts the supervised
+server on TCP port 2020. Connect using the Termux username shown at completion:
+
+```sh
+ssh -p 2020 TERMUX_USER@PHONE_LAN_IP
+```
+
+Do not expose this password-authenticated port through a router. Prefer adding
+an SSH public key and disabling password authentication for long-term use.
 
 The dashboard shows the phone's preferred Wi-Fi/Ethernet IPv4 address and the
 corresponding Mainsail URL below System status. Tap it to copy the address.

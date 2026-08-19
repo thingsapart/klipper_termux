@@ -71,7 +71,7 @@ fi
 rm -rf "$moonraker_wrapper_home"
 
 wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-klippy-wrapper.XXXXXX")"
-mkdir -p "$wrapper_home/klipper/klippy" "$wrapper_home/python-hooks"
+mkdir -p "$wrapper_home/klipper/klippy/chelper" "$wrapper_home/python-hooks"
 sed -e "s|@HOME@|$wrapper_home|g" \
   "$ROOT/installer/klippy-android.py" >"$wrapper_home/klippy-android.py"
 cat >"$wrapper_home/python-hooks/sitecustomize.py" <<'PY'
@@ -80,13 +80,23 @@ def denied_chmod(path, mode, *args, **kwargs):
     raise PermissionError(path)
 os.chmod = denied_chmod
 PY
+cat >"$wrapper_home/klipper/klippy/chelper/__init__.py" <<'PY'
+import os
+COMPILE_ARGS = "-shared -o %s %s"
+def check_build_c_library():
+    assert COMPILE_ARGS.endswith(" -lm")
+    return os.path.join(os.path.dirname(__file__), "c_helper.so")
+PY
 cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
 import os
+import chelper
+chelper.check_build_c_library()
 os.chmod("/dev/pts/123", 0o660)
 print("android PTY chmod ignored")
 PY
 PYTHONPATH="$wrapper_home/python-hooks" python3 "$wrapper_home/klippy-android.py" \
   | grep -q 'android PTY chmod ignored'
+grep -q -- '-lm' "$wrapper_home/.local/state/klipper-android/c-helper-linked-libm"
 cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
 import os
 os.chmod("/tmp/not-an-android-pty", 0o660)
@@ -186,6 +196,11 @@ fi
 hostname_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-hostname-test.XXXXXX")"
 mkdir -p "$hostname_home/printer_data/config"
 cp "$ROOT/installer/config/moonraker.conf" "$hostname_home/printer_data/config/moonraker.conf"
+sed \
+  -e 's|@PREFIX@|/not/termux|g' \
+  -e "s|@DATA_DIR@|$hostname_home/printer_data|g" \
+  "$ROOT/installer/config/printer.cfg.example" \
+  >"$hostname_home/printer_data/config/printer.cfg.example"
 hostname_kabctl="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/not/termux|g' \
@@ -200,5 +215,19 @@ if bash -c "$hostname_kabctl" kabctl hostname invalid.name >/dev/null 2>&1; then
   echo "kabctl accepted an invalid mDNS hostname" >&2
   exit 1
 fi
+bash -c "$hostname_kabctl" kabctl printer-starter >/dev/null
+grep -q '^# Managed starter configuration for Klipper Android' \
+  "$hostname_home/printer_data/config/printer.cfg"
+grep -q '^\[virtual_sdcard\]$' "$hostname_home/printer_data/config/printer.cfg"
+printf '[printer]\nkinematics: none\n# user-owned\n' \
+  >"$hostname_home/printer_data/config/printer.cfg"
+bash -c "$hostname_kabctl" kabctl printer-starter >/dev/null
+grep -q '^# user-owned$' "$hostname_home/printer_data/config/printer.cfg"
+grep -q 'pkg install -y openssh' "$ROOT/installer/kabctl"
+grep -q 'Port 2020' "$ROOT/installer/kabctl"
+grep -q '^[[:space:]]*passwd$' "$ROOT/installer/kabctl"
+grep -q 'starter-config-installed' "$ROOT/installer/install.sh"
+grep -q 'A real printer.cfg is user data and must never be replaced by UPDATE' \
+  "$ROOT/installer/install.sh"
 rm -rf "$hostname_home"
 echo "test_installer: ok"

@@ -421,8 +421,15 @@ if (( INSTALL_MOONRAKER )); then
 fi
 render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example" 1
 render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
-if [[ ! -e "$DATA_DIR/config/printer.cfg" ]]; then
-  run cp "$DATA_DIR/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg"
+PRINTER_CONFIG="$DATA_DIR/config/printer.cfg"
+if [[ ! -s "$PRINTER_CONFIG" ]] || grep -qE \
+    '^# (Managed starter configuration for Klipper Android|Replace this example with the configuration)' \
+    "$PRINTER_CONFIG"; then
+  # Install and update only configurations carrying one of our starter markers.
+  # A real printer.cfg is user data and must never be replaced by UPDATE.
+  run install -m 0600 "$DATA_DIR/config/printer.cfg.example" "$PRINTER_CONFIG"
+  run mkdir -p "$STATE_DIR"
+  run touch "$STATE_DIR/starter-config-installed"
 fi
 if (( INSTALL_MOONRAKER )); then
   MOONRAKER_CONFIG="$DATA_DIR/config/moonraker.conf"

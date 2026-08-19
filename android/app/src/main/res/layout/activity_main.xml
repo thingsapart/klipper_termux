@@ -445,8 +445,18 @@
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/pairing_explanation" />
                         <TextView android:id="@+id/pairing_command" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:fontFamily="monospace" android:padding="12dp" android:textColor="@color/mainsail_primary" android:textIsSelectable="true" android:textSize="12sp" />
                         <Button android:id="@+id/wizard_send_pairing" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/send_pairing_to_termux" />
+                        <Button android:id="@+id/wizard_create_starter_config" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/create_starter_config" />
                         <Button android:id="@+id/wizard_usb_action" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/start_bridge" />
                         <Button android:id="@+id/regenerate_token" style="@style/MainsailButtonSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="@string/regenerate_token" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_ssh_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_ssh" /><TextView android:id="@+id/wizard_ssh_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_ssh_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ssh_setup_description" />
+                        <Button android:id="@+id/wizard_setup_ssh" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/setup_ssh" />
+                        <Button android:id="@+id/wizard_skip_ssh" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/skip_ssh" />
                     </LinearLayout>
                 </LinearLayout>
 

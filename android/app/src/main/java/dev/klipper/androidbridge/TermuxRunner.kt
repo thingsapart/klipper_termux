@@ -56,9 +56,22 @@ object TermuxRunner {
         val command = "set -eu; mkdir -p '$HOME/printer_data/config'; " +
             "if [ ! -f '$config' ]; then cp '$example' '$config'; fi; " +
             "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/; " +
-            "s/^device=main,[^,]*/device=main,$device/' '$config'"
+            "s/^device=main,[^,]*/device=main,$device/' '$config'; " +
+            "if [ -x '$KABCTL' ]; then '$KABCTL' printer-starter; fi"
         return dispatch(context, SHELL, arrayOf("-lc", command))
     }
+
+    fun createStarterConfig(context: Context): Result =
+        dispatch(context, KABCTL, arrayOf("printer-starter"))
+
+    fun setupSsh(context: Context): Result = dispatch(
+        context,
+        KABCTL,
+        arrayOf("ssh-setup"),
+        background = false,
+        commandLabel = "Set up SSH",
+        commandDescription = "Install OpenSSH, choose a password, and listen on port 2020",
+    )
 
     fun configureHostname(context: Context, hostname: String): Result {
         require(hostname.matches(Regex("^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")))
