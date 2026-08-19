@@ -52,6 +52,7 @@ case "${1:-status}" in
         "$HOME_DIR/.local/bin/klipper-android-bridge" --check-config "$DATA_DIR/config/bridge.conf"
     fi
     check "Klipper Python environment" test -x "$HOME_DIR/klippy-env/bin/python"
+    check "Klipper Android launcher" test -f "$HOME_DIR/.local/bin/klippy-android.py"
     check "Klipper printer configuration" test -f "$DATA_DIR/config/printer.cfg"
     check "runit service directory" test -d "$PREFIX/var/service"
     for service in "${SERVICES[@]}"; do
@@ -85,9 +86,12 @@ case "${1:-status}" in
     fi
     exec tail -n 100 -F "${log_files[@]}"
     ;;
+  installer-log)
+    exec tail -n 200 -F "$HOME_DIR/.local/state/klipper-android/installer.log"
+    ;;
   restart)
     shift
     if (($#)); then exec sv restart "$@"; else exec sv restart "${SERVICES[@]}"; fi
     ;;
-  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|restart [services...]}" >&2; exit 2 ;;
+  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|restart [services...]}" >&2; exit 2 ;;
 esac

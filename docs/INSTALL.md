@@ -122,13 +122,26 @@ rebuilt only when its C headers, sources, or build script changed. Existing
 virtual environments are retained; pip is rerun against them and reuses
 already-satisfied packages, changing only dependencies required by the current
 requirements files. A missing or broken environment is recreated. Mainsail is
-downloaded only when its pinned release changed. Generated service scripts are
-refreshed, and a previously running stack is restarted. Configuration, gcodes,
-database, and logs are preserved. Delete performs a clean reinstall and removes
-all managed files.
+downloaded only when its pinned release changed or its installed `index.html`
+is missing. It is verified and extracted into a staging directory before the
+old UI is replaced. Generated service scripts and Android compatibility launchers
+are refreshed, and a previously running stack is restarted. If an update is
+interrupted after stopping services, the next successful UPDATE remembers to
+restart them. Configuration, gcodes, database, and logs are preserved. Delete
+performs a clean reinstall and removes all managed files.
 Both modes preserve Termux packages, `~/.termux/termux.properties`, and unrelated
 files. Automation may pass `--update` or `--reinstall` explicitly;
 `--non-interactive` without either mode refuses to change an existing install.
+
+Installer output is appended to
+`~/.local/state/klipper-android/installer.log` (rotated after 1 MiB). Inspect it
+with `kabctl installer-log`; failed commands include their approximate script
+line and exit status. Klipper is launched through a small compatibility shim
+that ignores only Android's denial of `chmod(0660)` on a Klipper-created
+`/dev/pts/*` node. Other permission errors are preserved.
+The optional Klipper G-code terminal is published below Termux's writable
+`$PREFIX/var/run/klipper-android` directory instead of upstream's hard-coded
+`/tmp/printer` path.
 
 ## Operational requirements
 

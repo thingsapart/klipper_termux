@@ -6,8 +6,8 @@ while [ ! -e "$PTY" ]; do
   sleep 2
 done
 mkdir -p "@DATA_DIR@/comms" "@DATA_DIR@/logs"
-exec "@HOME@/klippy-env/bin/python" "@HOME@/klipper/klippy/klippy.py" \
+exec "@HOME@/klippy-env/bin/python" "@HOME@/.local/bin/klippy-android.py" \
   "@DATA_DIR@/config/printer.cfg" \
+  -I "@PREFIX@/var/run/klipper-android/klippy-gcode" \
   -a "@DATA_DIR@/comms/klippy.sock" \
   -l "@DATA_DIR@/logs/klippy.log"
-

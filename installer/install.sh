@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
 PROJECT_NAME="klipper-android"
 CHANNEL="stable"
@@ -15,6 +15,7 @@ INSTANCE="printer"
 WEB_PORT=8080
 RESTART_AFTER_UPDATE=0
 UPDATE_SERVICES_STOPPED=0
+INSTALL_LOG=""
 
 usage() {
   cat <<'EOF'
@@ -105,6 +106,7 @@ MANAGED_TREES=(
 )
 MANAGED_FILES=(
   "$BIN_DIR/klipper-android-bridge"
+  "$BIN_DIR/klippy-android.py"
   "$BIN_DIR/klipper-android-runner"
   "$BIN_DIR/kabctl"
 )
@@ -204,9 +206,51 @@ prepare_update_mutation() {
         RESTART_AFTER_UPDATE=1
       fi
     done
+    if (( RESTART_AFTER_UPDATE )); then
+      touch "$STATE_DIR/restart-after-update"
+    fi
     SVDIR="$SERVICE_ROOT" sv down \
       klipper-web moonraker klipper klipper-android-bridge >/dev/null 2>&1 || true
   fi
+}
+
+start_installer_logging() {
+  (( DRY_RUN )) && return 0
+  mkdir -p "$STATE_DIR"
+  INSTALL_LOG="$STATE_DIR/installer.log"
+  if [[ -f "$INSTALL_LOG" ]] && (( $(wc -c <"$INSTALL_LOG") > 1048576 )); then
+    mv -f "$INSTALL_LOG" "$INSTALL_LOG.previous"
+  fi
+  exec > >(tee -a "$INSTALL_LOG") 2>&1
+  printf '\n===== installer started %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  trap 'status=$?; printf "===== installer finished %s (status %d) =====\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"' EXIT
+  trap 'status=$?; printf "ERROR: installer command failed near line %d (status %d)\n" "${BASH_LINENO[0]:-${LINENO}}" "$status" >&2' ERR
+}
+
+start_installer_logging
+if (( UPDATE )) && [[ -f "$STATE_DIR/restart-after-update" ]]; then
+  RESTART_AFTER_UPDATE=1
+fi
+
+render_template() {
+  local source="$1" destination="$2" force="${3:-0}" temporary=""
+  if [[ -e "$destination" && "$force" != 1 ]]; then return 0; fi
+  if (( DRY_RUN )); then printf '+ render %s -> %s\n' "$source" "$destination"; return 0; fi
+  temporary="$destination.kab-new.$$"
+  sed -e "s|@PREFIX@|$PREFIX|g" \
+      -e "s|@HOME@|$TERMUX_HOME|g" \
+      -e "s|@DATA_DIR@|$DATA_DIR|g" \
+      -e "s|@INSTANCE@|$INSTANCE|g" \
+      -e "s|@WEB_PORT@|$WEB_PORT|g" \
+      -e "s|@SERVICE@|${CURRENT_SERVICE:-service}|g" \
+      -e "s|@SERVICES@|${SERVICE_NAMES:-klipper-android-bridge klipper}|g" \
+      "$source" >"$temporary"
+  if [[ -e "$destination" ]] && cmp -s "$temporary" "$destination"; then
+    rm -f -- "$temporary"
+    return 0
+  fi
+  prepare_update_mutation
+  mv -f -- "$temporary" "$destination"
 }
 
 log "Installing native Termux dependencies"
@@ -246,6 +290,37 @@ if [[ -f "$SOURCE_DIR/installer/versions.env" ]]; then
   source "$SOURCE_DIR/installer/versions.env"
 fi
 : "${KLIPPER_REF:=master}" "${MOONRAKER_REF:=master}" "${MAINSAIL_VERSION:=latest}" "${MAINSAIL_SHA256:=}"
+
+SERVICE_NAMES="klipper-android-bridge klipper"
+(( INSTALL_MOONRAKER )) && SERVICE_NAMES+=" moonraker"
+(( INSTALL_UI )) && SERVICE_NAMES+=" klipper-web"
+
+repair_existing_service() {
+  local name="$1" template="$2" directory="$SERVICE_ROOT/$1"
+  [[ -d "$directory" ]] || return 0
+  run mkdir -p "$directory/log"
+  CURRENT_SERVICE="$name"
+  render_template "$template" "$directory/run" 1
+  render_template "$SOURCE_DIR/installer/services/log.run" "$directory/log/run" 1
+  unset CURRENT_SERVICE
+  run chmod 0755 "$directory/run" "$directory/log/run"
+}
+
+if (( UPDATE )); then
+  log "Repairing generated launchers and existing services"
+  render_template "$SOURCE_DIR/installer/klippy-android.py" "$BIN_DIR/klippy-android.py" 1
+  repair_existing_service "klipper-android-bridge" "$SOURCE_DIR/installer/services/bridge.run"
+  repair_existing_service "klipper" "$SOURCE_DIR/installer/services/klipper.run"
+  if (( INSTALL_MOONRAKER )); then
+    repair_existing_service "moonraker" "$SOURCE_DIR/installer/services/moonraker.run"
+  fi
+  if (( INSTALL_UI )); then
+    repair_existing_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
+  fi
+  render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
+  render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
+  run chmod 0755 "$BIN_DIR/kabctl" "$BIN_DIR/klipper-android-runner"
+fi
 
 BRIDGE_OUTPUT="$STATE_DIR/klipper-android-bridge"
 BRIDGE_HASH_FILE="$STATE_DIR/bridge-build.sha256"
@@ -334,28 +409,8 @@ if (( INSTALL_MOONRAKER )); then
     "$MOONRAKER_DIR/scripts/moonraker-requirements.txt"
 fi
 
-render_template() {
-  local source="$1" destination="$2" force="${3:-0}" temporary=""
-  if [[ -e "$destination" && "$force" != 1 ]]; then return 0; fi
-  if (( DRY_RUN )); then printf '+ render %s -> %s\n' "$source" "$destination"; return 0; fi
-  temporary="$destination.kab-new.$$"
-  sed -e "s|@PREFIX@|$PREFIX|g" \
-      -e "s|@HOME@|$TERMUX_HOME|g" \
-      -e "s|@DATA_DIR@|$DATA_DIR|g" \
-      -e "s|@INSTANCE@|$INSTANCE|g" \
-      -e "s|@WEB_PORT@|$WEB_PORT|g" \
-      -e "s|@SERVICE@|${CURRENT_SERVICE:-service}|g" \
-      -e "s|@SERVICES@|${SERVICE_NAMES:-klipper-android-bridge klipper}|g" \
-      "$source" >"$temporary"
-  if [[ -e "$destination" ]] && cmp -s "$temporary" "$destination"; then
-    rm -f -- "$temporary"
-    return 0
-  fi
-  prepare_update_mutation
-  mv -f -- "$temporary" "$destination"
-}
-
 log "Creating configuration and runit services"
+render_template "$SOURCE_DIR/installer/klippy-android.py" "$BIN_DIR/klippy-android.py" 1
 render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example" 1
 render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
 if [[ ! -e "$DATA_DIR/config/printer.cfg" ]]; then
@@ -409,6 +464,8 @@ if (( INSTALL_UI )); then
     INSTALL_MAINSAIL=0
   fi
   MAINSAIL_ARCHIVE="$STATE_DIR/mainsail.zip"
+  MAINSAIL_STAGING="$STATE_DIR/mainsail.new.$$"
+  MAINSAIL_BACKUP="$STATE_DIR/mainsail.previous.$$"
   if [[ "$CHANNEL" == stable ]]; then
     MAINSAIL_URL="https://github.com/mainsail-crew/mainsail/releases/download/$MAINSAIL_VERSION/mainsail.zip"
   else
@@ -416,7 +473,9 @@ if (( INSTALL_UI )); then
   fi
   if (( INSTALL_MAINSAIL )); then
     log "Installing Mainsail $MAINSAIL_VERSION"
-    run curl -fL "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE"
+    run rm -f -- "$MAINSAIL_ARCHIVE.part"
+    run curl -fL --retry 3 --retry-delay 2 "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE.part"
+    run mv -f -- "$MAINSAIL_ARCHIVE.part" "$MAINSAIL_ARCHIVE"
     if [[ "$CHANNEL" == stable && -n "$MAINSAIL_SHA256" ]]; then
       if (( DRY_RUN )); then
         printf '+ verify sha256 %s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE"
@@ -424,10 +483,16 @@ if (( INSTALL_UI )); then
         printf '%s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE" | sha256sum -c -
       fi
     fi
+    run rm -rf -- "$MAINSAIL_STAGING" "$MAINSAIL_BACKUP"
+    run mkdir -p "$MAINSAIL_STAGING"
+    run unzip -q -o "$MAINSAIL_ARCHIVE" -d "$MAINSAIL_STAGING"
+    if (( ! DRY_RUN )) && [[ ! -f "$MAINSAIL_STAGING/index.html" ]]; then
+      die "Mainsail archive did not contain index.html"
+    fi
     prepare_update_mutation
-    [[ ! -d "$MAINSAIL_DIR" ]] || run rm -rf -- "$MAINSAIL_DIR"
-    run mkdir -p "$MAINSAIL_DIR"
-    run unzip -o "$MAINSAIL_ARCHIVE" -d "$MAINSAIL_DIR"
+    if [[ -d "$MAINSAIL_DIR" ]]; then run mv -- "$MAINSAIL_DIR" "$MAINSAIL_BACKUP"; fi
+    run mv -- "$MAINSAIL_STAGING" "$MAINSAIL_DIR"
+    run rm -rf -- "$MAINSAIL_BACKUP"
     run rm -f -- "$MAINSAIL_ARCHIVE"
     if (( ! DRY_RUN )); then printf '%s\n' "$MAINSAIL_RELEASE" >"$MAINSAIL_MARKER"; fi
   else
@@ -437,9 +502,6 @@ if (( INSTALL_UI )); then
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi
 
-SERVICE_NAMES="klipper-android-bridge klipper"
-(( INSTALL_MOONRAKER )) && SERVICE_NAMES+=" moonraker"
-(( INSTALL_UI )) && SERVICE_NAMES+=" klipper-web"
 render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
 render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
 run chmod 0755 "$BIN_DIR/kabctl" "$BIN_DIR/klipper-android-runner"
@@ -489,6 +551,7 @@ if (( UPDATE && RESTART_AFTER_UPDATE )); then
   log "Restarting the updated stack"
   run "$BIN_DIR/klipper-android-runner" start
 fi
+if (( ! DRY_RUN )); then rm -f -- "$STATE_DIR/restart-after-update"; fi
 
 log "Installation complete"
 cat <<EOF

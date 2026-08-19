@@ -40,6 +40,43 @@ sh -n - <<<"$rendered_moonraker_service"
 grep -q 'PYTHONPATH="/data/data/com.termux/files/home/moonraker"' \
   <<<"$rendered_moonraker_service"
 
+wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-klippy-wrapper.XXXXXX")"
+mkdir -p "$wrapper_home/klipper/klippy" "$wrapper_home/python-hooks"
+sed -e "s|@HOME@|$wrapper_home|g" \
+  "$ROOT/installer/klippy-android.py" >"$wrapper_home/klippy-android.py"
+cat >"$wrapper_home/python-hooks/sitecustomize.py" <<'PY'
+import os
+def denied_chmod(path, mode, *args, **kwargs):
+    raise PermissionError(path)
+os.chmod = denied_chmod
+PY
+cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
+import os
+os.chmod("/dev/pts/123", 0o660)
+print("android PTY chmod ignored")
+PY
+PYTHONPATH="$wrapper_home/python-hooks" python3 "$wrapper_home/klippy-android.py" \
+  | grep -q 'android PTY chmod ignored'
+cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
+import os
+os.chmod("/tmp/not-an-android-pty", 0o660)
+PY
+if PYTHONPATH="$wrapper_home/python-hooks" python3 "$wrapper_home/klippy-android.py" \
+    >/dev/null 2>&1; then
+  echo "Klipper wrapper unexpectedly ignored a non-PTY chmod failure" >&2
+  exit 1
+fi
+rm -rf "$wrapper_home"
+
+rendered_klipper_service="$(sed \
+  -e 's|@PREFIX@|/data/data/com.termux/files/usr|g' \
+  -e 's|@HOME@|/data/data/com.termux/files/home|g' \
+  -e 's|@DATA_DIR@|/data/data/com.termux/files/home/printer_data|g' \
+  "$ROOT/installer/services/klipper.run")"
+sh -n - <<<"$rendered_klipper_service"
+grep -q '/.local/bin/klippy-android.py' <<<"$rendered_klipper_service"
+grep -q '/var/run/klipper-android/klippy-gcode' <<<"$rendered_klipper_service"
+
 rendered_kabctl="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/data/data/com.termux/files/usr|g' \
@@ -54,6 +91,7 @@ if grep -q '@SERVICES@\|@PREFIX@\|@HOME@\|@DATA_DIR@\|@WEB_PORT@' <<<"$rendered_
 fi
 doctor_output="$(NO_COLOR=1 bash -c "$rendered_kabctl" kabctl doctor 2>&1 || true)"
 grep -Fq '[FAIL] native bridge executable' <<<"$doctor_output"
+grep -Fq '[FAIL] Klipper Android launcher' <<<"$doctor_output"
 grep -Fq '[FAIL] doctor found' <<<"$doctor_output"
 
 output="$(PREFIX=/not/termux HOME=/tmp/kab-installer-test \
@@ -66,6 +104,7 @@ grep -q 'ln -sfn /tmp/kab-installer-test/.local/bin/kabctl /not/termux/bin/kabct
 grep -q 'allow-external-apps = true' <<<"$output"
 grep -q 'fetch --depth=1 --no-tags origin' <<<"$output"
 grep -q 'pip install --no-cache-dir' <<<"$output"
+grep -q 'klippy-android.py' <<<"$output"
 if grep -q 'Installing native Moonraker' <<<"$output"; then
   echo "--klipper-only unexpectedly installed Moonraker" >&2
   exit 1
@@ -96,4 +135,11 @@ if grep -q "rm -rf -- $reinstall_home/printer_data" <<<"$update_output"; then
   echo "update mode attempted to remove printer data" >&2
   exit 1
 fi
+full_update_output="$(PREFIX=/not/termux HOME="$reinstall_home" \
+  bash "$ROOT/installer/install.sh" --dry-run --source-dir "$ROOT" --update)"
+grep -q 'mainsail.zip.part' <<<"$full_update_output"
+grep -q 'mainsail.new.' <<<"$full_update_output"
+grep -q 'Mainsail archive did not contain index.html' "$ROOT/installer/install.sh"
+grep -q 'restart-after-update' "$ROOT/installer/install.sh"
+grep -q 'installer.log' "$ROOT/installer/install.sh"
 echo "test_installer: ok"
