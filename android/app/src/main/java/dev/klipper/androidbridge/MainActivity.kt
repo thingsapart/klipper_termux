@@ -227,6 +227,9 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.wizard_open_termux_github).setOnClickListener {
             openConfiguredLink(termuxGithubReleasesUrlInput)
         }
+        findViewById<Button>(R.id.wizard_enable_external_apps).setOnClickListener {
+            enableExternalTermuxApps()
+        }
         findViewById<Button>(R.id.wizard_grant_permission).setOnClickListener {
             if (!TermuxRunner.isInstalled(this)) {
                 openConfiguredLink(termuxDownloadUrlInput)
@@ -283,8 +286,24 @@ class MainActivity : Activity() {
             isEnabled = installerIsConfigured
             setOnClickListener {
                 val result = TermuxRunner.install(this@MainActivity, installerCommand)
-                if (result == TermuxRunner.Result.SENT) repository.markInstallerAttempted()
-                handleTermuxResult(result, "Termux installer started")
+                if (result == TermuxRunner.Result.SENT) {
+                    repository.markInstallerAttempted()
+                    handleTermuxResult(result, "Install request sent — opening Termux")
+                    // Android 10+ may prevent Termux's service from bringing its own activity
+                    // forward. This launch comes directly from the user's tap and also makes
+                    // installer output visible if the terminal session is already being created.
+                    handler.postDelayed({
+                        if (!TermuxRunner.openApp(this@MainActivity)) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Open Termux to view the installer",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }, 400)
+                } else {
+                    handleTermuxResult(result, "Install request sent")
+                }
                 renderWizard()
             }
         }
@@ -395,6 +414,23 @@ class MainActivity : Activity() {
         renderWizard()
     }
 
+    private fun enableExternalTermuxApps() {
+        if (!TermuxRunner.isInstalled(this)) {
+            openConfiguredLink(termuxDownloadUrlInput)
+            return
+        }
+        copyToClipboard(
+            "Enable Termux external apps",
+            TermuxRunner.ENABLE_EXTERNAL_APPS_COMMAND,
+            "Command copied — paste it in Termux and press Enter",
+        )
+        repository.markExternalAppsSetupAttempted()
+        renderWizard()
+        if (!TermuxRunner.openApp(this)) {
+            Toast.makeText(this, "Open Termux and paste the copied command", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun prepareUsbBridge() {
         val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
         when {
@@ -422,9 +458,12 @@ class MainActivity : Activity() {
         val mainsailReady = repository.mainsailSeen()
         val statuses = listOf(
             if (TermuxRunner.isInstalled(this)) WizardStatus.COMPLETE else WizardStatus.PENDING,
-            if (checkSelfPermission(TermuxRunner.PERMISSION) == PackageManager.PERMISSION_GRANTED) {
-                WizardStatus.COMPLETE
-            } else WizardStatus.PENDING,
+            when {
+                bridgeConnected || mainsailReady -> WizardStatus.COMPLETE
+                checkSelfPermission(TermuxRunner.PERMISSION) == PackageManager.PERMISSION_GRANTED &&
+                    repository.externalAppsSetupAttempted() -> WizardStatus.ATTEMPTED
+                else -> WizardStatus.PENDING
+            },
             when {
                 bridgeConnected || mainsailReady -> WizardStatus.COMPLETE
                 repository.installerAttempted() -> WizardStatus.ATTEMPTED
@@ -437,7 +476,10 @@ class MainActivity : Activity() {
             },
             if (mainsailReady) WizardStatus.COMPLETE else WizardStatus.PENDING,
         )
-        val next = statuses.indexOfFirst { it != WizardStatus.COMPLETE }
+        val firstPending = statuses.indexOfFirst { it == WizardStatus.PENDING }
+        val next = if (firstPending >= 0) firstPending else {
+            statuses.indexOfFirst { it == WizardStatus.ATTEMPTED }
+        }
         val completed = statuses.count { it == WizardStatus.COMPLETE }
         wizardProgress.text = if (completed == statuses.size) {
             "Setup complete · $completed/${statuses.size} steps verified"
@@ -481,6 +523,7 @@ class MainActivity : Activity() {
             lastNextWizardStep = next
         }
         findViewById<Button>(R.id.wizard_grant_permission).isEnabled = TermuxRunner.isInstalled(this)
+        findViewById<Button>(R.id.wizard_enable_external_apps).isEnabled = TermuxRunner.isInstalled(this)
         findViewById<Button>(R.id.wizard_send_pairing).isEnabled = repository.installerAttempted() ||
             bridgeConnected || mainsailReady
     }

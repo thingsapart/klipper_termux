@@ -35,9 +35,20 @@ Disable battery optimization for Termux and the companion app. Some vendors impo
   `RUN_COMMAND`.
 - Confirm `allow-external-apps = true` is present in
   `~/.termux/termux.properties`, then run `termux-reload-settings`.
+- Or use **Copy enable command and open Termux** in the setup wizard, paste the
+  copied command, and press Enter.
 - Confirm `~/.local/bin/klipper-android-runner status` works inside Termux.
 - The current bridge integration targets the official `com.termux` package;
   forks using another application ID are not discovered.
+
+## Installer does not appear in Termux
+
+The installer is requested as a foreground terminal session and the bridge app
+also opens Termux after sending it. On Android 10 and newer, the system can still
+block a terminal activity started by Termux's background service. If Termux opens
+without the installer session, tap the Termux command notification. Alternatively,
+allow Termux to **Display over other apps** in Android's app settings. This special
+permission belongs to Termux and is not required for background stack controls.
 
 ## Identical boards switch identities
 

@@ -93,6 +93,7 @@ if [[ -z "$SOURCE_DIR" ]]; then
   if [[ -d "$SOURCE_INSTALL_DIR/.git" ]]; then
     log "Updating bridge source"
     run git -C "$SOURCE_INSTALL_DIR" fetch --tags origin
+    run git -C "$SOURCE_INSTALL_DIR" checkout --detach origin/HEAD
   else
     log "Downloading bridge source"
     run mkdir -p "$(dirname "$SOURCE_INSTALL_DIR")"

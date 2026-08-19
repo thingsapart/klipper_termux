@@ -400,7 +400,8 @@
                     <LinearLayout android:id="@+id/wizard_permission_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_permission" /><TextView android:id="@+id/wizard_permission_state" style="@style/WizardHeaderState" /></LinearLayout>
                     <LinearLayout android:id="@+id/wizard_permission_body" style="@style/WizardBody">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/permission_step_description" />
-                        <Button android:id="@+id/wizard_grant_permission" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/grant_termux_permission" />
+                        <Button android:id="@+id/wizard_enable_external_apps" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/enable_external_apps" />
+                        <Button android:id="@+id/wizard_grant_permission" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/grant_termux_permission" />
                     </LinearLayout>
                 </LinearLayout>
 

@@ -55,15 +55,20 @@ Open **Settings** from the navigation drawer or overflow menu, then tap
 **Install and Setup Klipper** to enter the guided checklist. The wizard detects
 Termux, command permission, USB permission, live bridge connections, and a
 working Mainsail page. It also shows a copyable curl installer command. APKs built
-with `KAB_INSTALLER_URL` and `KAB_REPOSITORY_URL` enable an **Install in
-Termux** button that sends that fixed command through the same permission gate.
+with `KAB_INSTALLER_URL` and `KAB_REPOSITORY_URL` enable an **Install Klipper
+in Termux** button that sends that fixed command through the same permission gate.
+Installation runs in a visible Termux terminal so progress and download or
+package-manager errors are not hidden; stack start/stop/status commands remain
+background commands.
 The bridge step can place the app's token and listener port into Termux's
 `~/printer_data/config/bridge.conf` through the permission-gated command API.
 The USB device UUID still must be learned after attaching the printer.
 
-On a fresh Termux installation, `allow-external-apps = true` must still be set
-manually before Android is allowed to invoke the installer; copying the command
-into Termux does not require external-app control.
+On a fresh Termux installation, `allow-external-apps = true` must still be
+confirmed once inside Termux before Android is allowed to invoke the installer.
+The wizard's **Copy enable command and open Termux** action copies an idempotent
+configuration command and launches Termux; paste it and press Enter. Keeping
+that final confirmation inside Termux preserves its security boundary.
 
 ## Build tools and runtime dependencies
 

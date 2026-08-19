@@ -14,6 +14,12 @@ object TermuxRunner {
     private const val HOME = "/data/data/com.termux/files/home"
     private const val SHELL = "/data/data/com.termux/files/usr/bin/bash"
     private const val RUNNER = "$HOME/.local/bin/klipper-android-runner"
+    const val ENABLE_EXTERNAL_APPS_COMMAND =
+        "mkdir -p ~/.termux; touch ~/.termux/termux.properties; " +
+            "sed -i -E '/^[[:space:]]*allow-external-apps[[:space:]]*=/d' " +
+            "~/.termux/termux.properties; " +
+            "printf '\\nallow-external-apps = true\\n' >> ~/.termux/termux.properties; " +
+            "termux-reload-settings"
 
     enum class Result { SENT, PERMISSION_REQUIRED, TERMUX_UNAVAILABLE }
 
@@ -23,7 +29,14 @@ object TermuxRunner {
     }
 
     fun install(context: Context, installerCommand: String): Result =
-        dispatch(context, SHELL, arrayOf("-lc", installerCommand))
+        dispatch(
+            context,
+            SHELL,
+            arrayOf("-lc", installerCommand),
+            background = false,
+            commandLabel = "Install Klipper",
+            commandDescription = "Install Klipper, Moonraker, Mainsail, and bridge services",
+        )
 
     fun configureBridge(context: Context, tokenHex: String, port: Int): Result {
         require(tokenHex.matches(Regex("[0-9a-f]{64}")))
@@ -43,7 +56,24 @@ object TermuxRunner {
         false
     }
 
-    private fun dispatch(context: Context, path: String, arguments: Array<String>): Result {
+    fun openApp(context: Context): Boolean {
+        val intent = context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: return false
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    private fun dispatch(
+        context: Context,
+        path: String,
+        arguments: Array<String>,
+        background: Boolean = true,
+        commandLabel: String? = null,
+        commandDescription: String? = null,
+    ): Result {
         if (context.checkSelfPermission(PERMISSION) != PackageManager.PERMISSION_GRANTED) {
             return Result.PERMISSION_REQUIRED
         }
@@ -52,8 +82,12 @@ object TermuxRunner {
             putExtra("com.termux.RUN_COMMAND_PATH", path)
             putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arguments)
             putExtra("com.termux.RUN_COMMAND_WORKDIR", HOME)
-            putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+            putExtra("com.termux.RUN_COMMAND_BACKGROUND", background)
             putExtra("com.termux.RUN_COMMAND_SESSION_ACTION", "0")
+            commandLabel?.let { putExtra("com.termux.RUN_COMMAND_COMMAND_LABEL", it) }
+            commandDescription?.let {
+                putExtra("com.termux.RUN_COMMAND_COMMAND_DESCRIPTION", it)
+            }
         }
         return try {
             if (context.startService(intent) == null) Result.TERMUX_UNAVAILABLE else Result.SENT
