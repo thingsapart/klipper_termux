@@ -9,7 +9,7 @@ class InstallerCommandTest {
     @Test fun buildsCopyablePinnedCommand() {
         assertEquals(
             "pkg install -y curl && curl -fsSL 'https://example.test/install.sh' | " +
-                "KAB_REPOSITORY='https://example.test/repo.git' bash -s -- --non-interactive",
+                "KAB_REPOSITORY='https://example.test/repo.git' bash",
             InstallerCommand.create(
                 "https://example.test/install.sh",
                 "https://example.test/repo.git",

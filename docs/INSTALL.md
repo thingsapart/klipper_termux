@@ -100,6 +100,19 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/REPOSITORY/main/installer/ins
 
 The repository URL remains a placeholder until this project is published. Downloading, inspecting, and executing the script separately is safer than curl-to-shell.
 
+Klipper, Moonraker, and the bridge project are shallow working-tree checkouts:
+only the selected revision is fetched, rather than the projects' full Git
+history. Python dependencies use pip without retaining downloaded-wheel caches,
+and the Mainsail archive is deleted after extraction.
+
+Rerunning the installer detects an existing managed installation and asks for
+the exact word `DELETE` in the Termux terminal before replacing it. Reinstall
+removes the managed source trees, virtual environments, Mainsail files, runit
+services, logs, gcodes, database, and printer configuration. It preserves
+Termux packages, `~/.termux/termux.properties`, and unrelated files. Automation
+may pass `--reinstall` as explicit authorization; `--non-interactive` alone
+refuses to delete an existing installation.
+
 ## Operational requirements
 
 - Android 7/API 24 or newer.

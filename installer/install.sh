@@ -6,6 +6,7 @@ CHANNEL="stable"
 INSTALL_UI=1
 INSTALL_MOONRAKER=1
 NON_INTERACTIVE=0
+REINSTALL=0
 DRY_RUN=0
 ENABLE_APP_CONTROL=1
 SOURCE_DIR=""
@@ -21,7 +22,8 @@ Usage: install.sh [options]
   --instance NAME      Instance name (default: printer)
   --port NUMBER        Mainsail HTTP port (default: 8080)
   --source-dir PATH    Use an existing project checkout
-  --non-interactive    Accept defaults
+  --non-interactive    Accept defaults; fail rather than delete an existing install
+  --reinstall          Remove an existing managed installation without prompting
   --dry-run            Print commands without changing the system
   --no-app-control     Do not allow the companion app to run Termux commands
   -h, --help           Show this help
@@ -44,6 +46,7 @@ while (($#)); do
     --port) shift; WEB_PORT="${1:-}" ;;
     --source-dir) shift; SOURCE_DIR="${1:-}" ;;
     --non-interactive) NON_INTERACTIVE=1 ;;
+    --reinstall) REINSTALL=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --no-app-control) ENABLE_APP_CONTROL=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -64,6 +67,32 @@ STATE_DIR="$TERMUX_HOME/.local/state/$PROJECT_NAME"
 SOURCE_INSTALL_DIR="$TERMUX_HOME/.local/share/$PROJECT_NAME/source"
 BIN_DIR="$TERMUX_HOME/.local/bin"
 SERVICE_ROOT="$PREFIX/var/service"
+KLIPPER_DIR="$TERMUX_HOME/klipper"
+KLIPPER_ENV="$TERMUX_HOME/klippy-env"
+MOONRAKER_DIR="$TERMUX_HOME/moonraker"
+MOONRAKER_ENV="$TERMUX_HOME/moonraker-env"
+MAINSAIL_DIR="$TERMUX_HOME/mainsail"
+
+MANAGED_TREES=(
+  "$DATA_DIR"
+  "$STATE_DIR"
+  "$TERMUX_HOME/.local/share/$PROJECT_NAME"
+  "$KLIPPER_DIR"
+  "$KLIPPER_ENV"
+  "$MOONRAKER_DIR"
+  "$MOONRAKER_ENV"
+  "$MAINSAIL_DIR"
+  "$PREFIX/var/run/klipper-android"
+  "$SERVICE_ROOT/klipper-android-bridge"
+  "$SERVICE_ROOT/klipper"
+  "$SERVICE_ROOT/moonraker"
+  "$SERVICE_ROOT/klipper-web"
+)
+MANAGED_FILES=(
+  "$BIN_DIR/klipper-android-bridge"
+  "$BIN_DIR/klipper-android-runner"
+  "$BIN_DIR/kabctl"
+)
 
 if (( ! DRY_RUN )); then
   [[ "$PREFIX" == /data/data/*/files/usr || "$PREFIX" == /data/user/*/files/usr ]] ||
@@ -76,6 +105,58 @@ fi
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 if [[ -z "$SOURCE_DIR" && -f "$SCRIPT_DIR/../CMakeLists.txt" ]]; then
   SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
+# A locally invoked copy from our managed source tree is about to delete itself.
+# Bash has already read the script, so switch back to download mode for the rebuild.
+if [[ "$SOURCE_DIR" == "$SOURCE_INSTALL_DIR" ]]; then
+  SOURCE_DIR=""
+fi
+
+has_existing_installation() {
+  local path
+  for path in "${MANAGED_TREES[@]}" "${MANAGED_FILES[@]}"; do
+    [[ -e "$path" || -L "$path" ]] && return 0
+  done
+  return 1
+}
+
+purge_existing_installation() {
+  local path
+  log "Stopping and removing the existing managed installation"
+  if (( DRY_RUN )); then
+    printf '+ sv down klipper-web moonraker klipper klipper-android-bridge (if available)\n'
+  elif command -v sv >/dev/null 2>&1; then
+    SVDIR="$SERVICE_ROOT" sv down klipper-web moonraker klipper klipper-android-bridge \
+      >/dev/null 2>&1 || true
+  fi
+  for path in "${MANAGED_TREES[@]}"; do
+    case "$path" in
+      "$TERMUX_HOME"/*|"$PREFIX"/var/run/klipper-android|"$SERVICE_ROOT"/*) ;;
+      *) die "refusing unsafe removal path: $path" ;;
+    esac
+    run rm -rf -- "$path"
+  done
+  for path in "${MANAGED_FILES[@]}"; do
+    case "$path" in "$BIN_DIR"/*) ;; *) die "refusing unsafe removal path: $path" ;; esac
+    run rm -f -- "$path"
+  done
+}
+
+if has_existing_installation; then
+  if (( ! REINSTALL )); then
+    if (( NON_INTERACTIVE )); then
+      die "an existing installation was found; rerun interactively or pass --reinstall"
+    fi
+    printf '\nAn existing Klipper Android installation was found.\n'
+    printf 'This will permanently remove its Klipper/Moonraker environments, Mainsail,\n'
+    printf 'services, logs, gcodes, database, and printer configuration under:\n  %s\n' "$DATA_DIR"
+    printf 'Termux packages and unrelated Termux files will be preserved.\n'
+    printf 'Type DELETE to continue: '
+    [[ -r /dev/tty ]] || die "confirmation requires a terminal; rerun with --reinstall to authorize deletion"
+    read -r confirmation </dev/tty
+    [[ "$confirmation" == DELETE ]] || die "reinstall cancelled"
+  fi
+  purge_existing_installation
 fi
 
 log "Installing native Termux dependencies"
@@ -92,12 +173,12 @@ if [[ -z "$SOURCE_DIR" ]]; then
   [[ -n "$REPOSITORY" ]] || die "set KAB_REPOSITORY to this project's public Git URL"
   if [[ -d "$SOURCE_INSTALL_DIR/.git" ]]; then
     log "Updating bridge source"
-    run git -C "$SOURCE_INSTALL_DIR" fetch --tags origin
-    run git -C "$SOURCE_INSTALL_DIR" checkout --detach origin/HEAD
+    run git -C "$SOURCE_INSTALL_DIR" fetch --depth=1 --no-tags origin HEAD
+    run git -C "$SOURCE_INSTALL_DIR" checkout --detach FETCH_HEAD
   else
     log "Downloading bridge source"
     run mkdir -p "$(dirname "$SOURCE_INSTALL_DIR")"
-    run git clone "$REPOSITORY" "$SOURCE_INSTALL_DIR"
+    run git clone --depth=1 --single-branch --no-tags "$REPOSITORY" "$SOURCE_INSTALL_DIR"
   fi
   SOURCE_DIR="$SOURCE_INSTALL_DIR"
 fi
@@ -113,42 +194,29 @@ BRIDGE_OUTPUT="$STATE_DIR/klipper-android-bridge"
 run "$SOURCE_DIR/bridge/build-termux.sh" "$BRIDGE_OUTPUT"
 run install -m 0755 "$BRIDGE_OUTPUT" "$BIN_DIR/klipper-android-bridge"
 
-KLIPPER_DIR="$TERMUX_HOME/klipper"
-KLIPPER_ENV="$TERMUX_HOME/klippy-env"
-log "Installing native Klipper"
-if [[ -d "$KLIPPER_DIR/.git" ]]; then
-  run git -C "$KLIPPER_DIR" fetch origin
-else
-  run git clone https://github.com/Klipper3d/klipper.git "$KLIPPER_DIR"
-fi
-if [[ "$CHANNEL" == edge ]]; then
-  run git -C "$KLIPPER_DIR" checkout master
-  run git -C "$KLIPPER_DIR" pull --ff-only origin master
-else
-  run git -C "$KLIPPER_DIR" checkout --detach "$KLIPPER_REF"
-fi
-run python -m venv "$KLIPPER_ENV"
-run "$KLIPPER_ENV/bin/pip" install --upgrade pip wheel
-run "$KLIPPER_ENV/bin/pip" install -r "$KLIPPER_DIR/scripts/klippy-requirements.txt"
+shallow_checkout() {
+  local repository="$1" destination="$2" revision="$3"
+  run mkdir -p "$destination"
+  run git -C "$destination" init -q
+  run git -C "$destination" remote add origin "$repository"
+  run git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
+  run git -C "$destination" checkout --detach FETCH_HEAD
+}
 
-MOONRAKER_DIR="$TERMUX_HOME/moonraker"
-MOONRAKER_ENV="$TERMUX_HOME/moonraker-env"
+log "Installing native Klipper"
+shallow_checkout https://github.com/Klipper3d/klipper.git "$KLIPPER_DIR" \
+  "$([[ "$CHANNEL" == edge ]] && printf master || printf %s "$KLIPPER_REF")"
+run python -m venv "$KLIPPER_ENV"
+run "$KLIPPER_ENV/bin/pip" install --no-cache-dir --upgrade pip wheel
+run "$KLIPPER_ENV/bin/pip" install --no-cache-dir -r "$KLIPPER_DIR/scripts/klippy-requirements.txt"
+
 if (( INSTALL_MOONRAKER )); then
   log "Installing native Moonraker"
-  if [[ -d "$MOONRAKER_DIR/.git" ]]; then
-    run git -C "$MOONRAKER_DIR" fetch origin
-  else
-    run git clone https://github.com/Arksine/moonraker.git "$MOONRAKER_DIR"
-  fi
-  if [[ "$CHANNEL" == edge ]]; then
-    run git -C "$MOONRAKER_DIR" checkout master
-    run git -C "$MOONRAKER_DIR" pull --ff-only origin master
-  else
-    run git -C "$MOONRAKER_DIR" checkout --detach "$MOONRAKER_REF"
-  fi
+  shallow_checkout https://github.com/Arksine/moonraker.git "$MOONRAKER_DIR" \
+    "$([[ "$CHANNEL" == edge ]] && printf master || printf %s "$MOONRAKER_REF")"
   run python -m venv "$MOONRAKER_ENV"
-  run "$MOONRAKER_ENV/bin/pip" install --upgrade pip wheel
-  run "$MOONRAKER_ENV/bin/pip" install -r "$MOONRAKER_DIR/scripts/moonraker-requirements.txt"
+  run "$MOONRAKER_ENV/bin/pip" install --no-cache-dir --upgrade pip wheel
+  run "$MOONRAKER_ENV/bin/pip" install --no-cache-dir -r "$MOONRAKER_DIR/scripts/moonraker-requirements.txt"
 fi
 
 render_template() {
@@ -195,7 +263,6 @@ fi
 
 if (( INSTALL_UI )); then
   log "Installing Mainsail"
-  MAINSAIL_DIR="$TERMUX_HOME/mainsail"
   MAINSAIL_ARCHIVE="$STATE_DIR/mainsail.zip"
   if [[ "$CHANNEL" == stable ]]; then
     MAINSAIL_URL="https://github.com/mainsail-crew/mainsail/releases/download/$MAINSAIL_VERSION/mainsail.zip"
@@ -212,6 +279,7 @@ if (( INSTALL_UI )); then
   fi
   run mkdir -p "$MAINSAIL_DIR"
   run unzip -o "$MAINSAIL_ARCHIVE" -d "$MAINSAIL_DIR"
+  run rm -f -- "$MAINSAIL_ARCHIVE"
   render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf"
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi

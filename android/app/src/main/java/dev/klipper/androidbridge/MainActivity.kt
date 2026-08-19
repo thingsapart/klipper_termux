@@ -284,6 +284,11 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.install_termux).apply {
             isEnabled = installerIsConfigured
+            setText(if (repository.installerAttempted()) {
+                R.string.reinstall_in_termux
+            } else {
+                R.string.install_in_termux
+            })
             setOnClickListener {
                 val result = TermuxRunner.install(this@MainActivity, installerCommand)
                 if (result == TermuxRunner.Result.SENT) {
@@ -524,6 +529,11 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.wizard_grant_permission).isEnabled = TermuxRunner.isInstalled(this)
         findViewById<Button>(R.id.wizard_enable_external_apps).isEnabled = TermuxRunner.isInstalled(this)
+        findViewById<Button>(R.id.install_termux).setText(if (repository.installerAttempted()) {
+            R.string.reinstall_in_termux
+        } else {
+            R.string.install_in_termux
+        })
         findViewById<Button>(R.id.wizard_send_pairing).isEnabled = repository.installerAttempted() ||
             bridgeConnected || mainsailReady
     }

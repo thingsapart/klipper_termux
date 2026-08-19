@@ -39,8 +39,26 @@ grep -q 'Installing native Klipper' <<<"$output"
 grep -q 'Installation complete' <<<"$output"
 grep -q 'klipper-android-runner' <<<"$output"
 grep -q 'allow-external-apps = true' <<<"$output"
+grep -q 'fetch --depth=1 --no-tags origin' <<<"$output"
+grep -q 'pip install --no-cache-dir' <<<"$output"
 if grep -q 'Installing native Moonraker' <<<"$output"; then
   echo "--klipper-only unexpectedly installed Moonraker" >&2
   exit 1
 fi
+
+reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-reinstall-test.XXXXXX")"
+trap 'rm -rf "$reinstall_home"' EXIT
+mkdir -p "$reinstall_home/printer_data/config"
+touch "$reinstall_home/printer_data/config/printer.cfg"
+if PREFIX=/not/termux HOME="$reinstall_home" \
+  bash "$ROOT/installer/install.sh" --dry-run --source-dir "$ROOT" \
+    --klipper-only --non-interactive >/dev/null 2>&1; then
+  echo "non-interactive reinstall unexpectedly accepted deletion" >&2
+  exit 1
+fi
+reinstall_output="$(PREFIX=/not/termux HOME="$reinstall_home" \
+  bash "$ROOT/installer/install.sh" --dry-run --source-dir "$ROOT" \
+    --klipper-only --reinstall)"
+grep -q 'Stopping and removing the existing managed installation' <<<"$reinstall_output"
+grep -q "rm -rf -- $reinstall_home/printer_data" <<<"$reinstall_output"
 echo "test_installer: ok"

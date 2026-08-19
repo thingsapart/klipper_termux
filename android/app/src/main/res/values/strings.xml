@@ -65,6 +65,7 @@
     <string name="installer_description">Tap the command to copy it into Termux, or run the same fixed command through Termux after enabling external app control.</string>
     <string name="installer_permission_note">One-tap install requires Termux’s RUN_COMMAND permission and allow-external-apps. The command remains copyable without them.</string>
     <string name="install_in_termux">Install Klipper in Termux</string>
+    <string name="reinstall_in_termux">Reinstall Klipper in Termux</string>
     <string name="installer_not_published">Set kabInstallerUrl and kabRepositoryUrl when building the APK to enable one-tap installation.</string>
     <string name="pairing_explanation">This secret authenticates the native Termux bridge to the Android USB service. After installation, paste it into ~/printer_data/config/bridge.conf. Tap below to copy.</string>
     <string name="toggle_bridge_description">Toggle the Android USB bridge</string>
