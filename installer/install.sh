@@ -14,6 +14,7 @@ SOURCE_DIR=""
 INSTANCE="printer"
 WEB_PORT=8080
 RESTART_AFTER_UPDATE=0
+UPDATE_SERVICES_STOPPED=0
 
 usage() {
   cat <<'EOF'
@@ -77,6 +78,15 @@ KLIPPER_ENV="$TERMUX_HOME/klippy-env"
 MOONRAKER_DIR="$TERMUX_HOME/moonraker"
 MOONRAKER_ENV="$TERMUX_HOME/moonraker-env"
 MAINSAIL_DIR="$TERMUX_HOME/mainsail"
+INSTALL_MANIFEST="$STATE_DIR/install-manifest"
+PREVIOUS_MAINSAIL_RELEASE=""
+if [[ -f "$SOURCE_INSTALL_DIR/installer/versions.env" ]]; then
+  previous_mainsail_version="$(sed -n 's/^MAINSAIL_VERSION=//p' \
+    "$SOURCE_INSTALL_DIR/installer/versions.env" | head -n 1)"
+  previous_mainsail_sha="$(sed -n 's/^MAINSAIL_SHA256=//p' \
+    "$SOURCE_INSTALL_DIR/installer/versions.env" | head -n 1)"
+  PREVIOUS_MAINSAIL_RELEASE="$previous_mainsail_version:$previous_mainsail_sha"
+fi
 
 MANAGED_TREES=(
   "$DATA_DIR"
@@ -180,24 +190,24 @@ if has_existing_installation; then
     purge_existing_installation
   else
     log "Updating managed software; printer data and configuration will be preserved"
-    if (( DRY_RUN )); then
-      printf '+ stop managed services before update (if running)\n'
-    elif command -v sv >/dev/null 2>&1; then
-      for service in klipper-android-bridge klipper moonraker klipper-web; do
-        if SVDIR="$SERVICE_ROOT" sv status "$service" 2>/dev/null | grep -q '^run:'; then
-          RESTART_AFTER_UPDATE=1
-        fi
-      done
-      SVDIR="$SERVICE_ROOT" sv down \
-        klipper-web moonraker klipper klipper-android-bridge >/dev/null 2>&1 || true
-    fi
-    # These are generated/replaceable artifacts. Recreate them to avoid stale
-    # Python packages or static UI files while leaving DATA_DIR untouched.
-    run rm -rf -- "$KLIPPER_ENV"
-    (( INSTALL_MOONRAKER )) && run rm -rf -- "$MOONRAKER_ENV"
-    (( INSTALL_UI )) && run rm -rf -- "$MAINSAIL_DIR"
   fi
 fi
+
+prepare_update_mutation() {
+  (( UPDATE && ! UPDATE_SERVICES_STOPPED )) || return 0
+  UPDATE_SERVICES_STOPPED=1
+  if (( DRY_RUN )); then
+    printf '+ stop managed services before applying changes (if running)\n'
+  elif command -v sv >/dev/null 2>&1; then
+    for service in klipper-android-bridge klipper moonraker klipper-web; do
+      if SVDIR="$SERVICE_ROOT" sv status "$service" 2>/dev/null | grep -q '^run:'; then
+        RESTART_AFTER_UPDATE=1
+      fi
+    done
+    SVDIR="$SERVICE_ROOT" sv down \
+      klipper-web moonraker klipper klipper-android-bridge >/dev/null 2>&1 || true
+  fi
+}
 
 log "Installing native Termux dependencies"
 PACKAGES=(git python clang make ndk-sysroot libffi openssl zlib curl unzip termux-services)
@@ -214,7 +224,14 @@ if [[ -z "$SOURCE_DIR" ]]; then
   if [[ -d "$SOURCE_INSTALL_DIR/.git" ]]; then
     log "Updating bridge source"
     run git -C "$SOURCE_INSTALL_DIR" fetch --depth=1 --no-tags origin HEAD
-    run git -C "$SOURCE_INSTALL_DIR" checkout --detach FETCH_HEAD
+    if (( DRY_RUN )) || [[ "$(git -C "$SOURCE_INSTALL_DIR" rev-parse HEAD)" != \
+        "$(git -C "$SOURCE_INSTALL_DIR" rev-parse FETCH_HEAD)" ]] || \
+        ! git -C "$SOURCE_INSTALL_DIR" diff --quiet || \
+        ! git -C "$SOURCE_INSTALL_DIR" diff --cached --quiet; then
+      run git -C "$SOURCE_INSTALL_DIR" checkout --detach --force FETCH_HEAD
+    else
+      log "Bridge source is already current"
+    fi
   else
     log "Downloading bridge source"
     run mkdir -p "$(dirname "$SOURCE_INSTALL_DIR")"
@@ -230,13 +247,33 @@ if [[ -f "$SOURCE_DIR/installer/versions.env" ]]; then
 fi
 : "${KLIPPER_REF:=master}" "${MOONRAKER_REF:=master}" "${MAINSAIL_VERSION:=latest}" "${MAINSAIL_SHA256:=}"
 
-log "Building native PTY bridge"
 BRIDGE_OUTPUT="$STATE_DIR/klipper-android-bridge"
-run "$SOURCE_DIR/bridge/build-termux.sh" "$BRIDGE_OUTPUT"
-run install -m 0755 "$BRIDGE_OUTPUT" "$BIN_DIR/klipper-android-bridge"
+BRIDGE_HASH_FILE="$STATE_DIR/bridge-build.sha256"
+if (( DRY_RUN )); then
+  BRIDGE_BUILD_REQUIRED=1
+else
+  BRIDGE_BUILD_HASH="$(
+    sha256sum "$SOURCE_DIR/bridge/build-termux.sh" \
+      "$SOURCE_DIR"/bridge/include/*.h "$SOURCE_DIR"/bridge/src/*.c | sha256sum | awk '{print $1}'
+  )"
+  BRIDGE_BUILD_REQUIRED=1
+  if [[ -x "$BIN_DIR/klipper-android-bridge" && -f "$BRIDGE_HASH_FILE" && \
+      "$(<"$BRIDGE_HASH_FILE")" == "$BRIDGE_BUILD_HASH" ]]; then
+    BRIDGE_BUILD_REQUIRED=0
+  fi
+fi
+if (( BRIDGE_BUILD_REQUIRED )); then
+  log "Building native PTY bridge"
+  run "$SOURCE_DIR/bridge/build-termux.sh" "$BRIDGE_OUTPUT"
+  prepare_update_mutation
+  run install -m 0755 "$BRIDGE_OUTPUT" "$BIN_DIR/klipper-android-bridge"
+  if (( ! DRY_RUN )); then printf '%s\n' "$BRIDGE_BUILD_HASH" >"$BRIDGE_HASH_FILE"; fi
+else
+  log "Native PTY bridge build inputs are unchanged"
+fi
 
 shallow_checkout() {
-  local repository="$1" destination="$2" revision="$3"
+  local repository="$1" destination="$2" revision="$3" target=""
   if [[ -d "$destination/.git" ]]; then
     run git -C "$destination" remote set-url origin "$repository"
   else
@@ -245,30 +282,63 @@ shallow_checkout() {
     run git -C "$destination" init -q
     run git -C "$destination" remote add origin "$repository"
   fi
-  run git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
-  run git -C "$destination" checkout --detach --force FETCH_HEAD
+  if (( ! DRY_RUN )) && [[ "$revision" =~ ^[0-9a-fA-F]{40}$ ]] && \
+      git -C "$destination" cat-file -e "$revision^{commit}" 2>/dev/null; then
+    target="$revision"
+    log "$(basename "$destination") source revision is already present"
+  else
+    run git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
+    (( DRY_RUN )) || target="$(git -C "$destination" rev-parse FETCH_HEAD)"
+  fi
+  if (( DRY_RUN )) || [[ "$(git -C "$destination" rev-parse HEAD 2>/dev/null || true)" != "$target" ]] || \
+      ! git -C "$destination" diff --quiet || ! git -C "$destination" diff --cached --quiet; then
+    prepare_update_mutation
+    run git -C "$destination" checkout --detach --force "${target:-FETCH_HEAD}"
+  else
+    log "$(basename "$destination") working tree is already current"
+  fi
+}
+
+sync_python_environment() {
+  local name="$1" environment="$2" requirements="$3"
+  if (( DRY_RUN )); then
+    run python -m venv "$environment"
+    run "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
+    run "$environment/bin/pip" install --no-cache-dir -r "$requirements"
+    return
+  fi
+  if [[ ! -x "$environment/bin/python" || ! -x "$environment/bin/pip" ]]; then
+    prepare_update_mutation
+    [[ ! -e "$environment" ]] || run rm -rf -- "$environment"
+    run python -m venv "$environment"
+    run "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
+  fi
+  log "Checking $name Python dependencies"
+  prepare_update_mutation
+  # pip operates incrementally in the retained environment: already-satisfied
+  # packages are reused and only changed/missing requirements are installed.
+  run "$environment/bin/pip" install --no-cache-dir -r "$requirements"
 }
 
 log "Installing native Klipper"
 shallow_checkout https://github.com/Klipper3d/klipper.git "$KLIPPER_DIR" \
   "$([[ "$CHANNEL" == edge ]] && printf master || printf %s "$KLIPPER_REF")"
-run python -m venv "$KLIPPER_ENV"
-run "$KLIPPER_ENV/bin/pip" install --no-cache-dir --upgrade pip wheel
-run "$KLIPPER_ENV/bin/pip" install --no-cache-dir -r "$KLIPPER_DIR/scripts/klippy-requirements.txt"
+sync_python_environment klipper "$KLIPPER_ENV" \
+  "$KLIPPER_DIR/scripts/klippy-requirements.txt"
 
 if (( INSTALL_MOONRAKER )); then
   log "Installing native Moonraker"
   shallow_checkout https://github.com/Arksine/moonraker.git "$MOONRAKER_DIR" \
     "$([[ "$CHANNEL" == edge ]] && printf master || printf %s "$MOONRAKER_REF")"
-  run python -m venv "$MOONRAKER_ENV"
-  run "$MOONRAKER_ENV/bin/pip" install --no-cache-dir --upgrade pip wheel
-  run "$MOONRAKER_ENV/bin/pip" install --no-cache-dir -r "$MOONRAKER_DIR/scripts/moonraker-requirements.txt"
+  sync_python_environment moonraker "$MOONRAKER_ENV" \
+    "$MOONRAKER_DIR/scripts/moonraker-requirements.txt"
 fi
 
 render_template() {
-  local source="$1" destination="$2" force="${3:-0}"
+  local source="$1" destination="$2" force="${3:-0}" temporary=""
   if [[ -e "$destination" && "$force" != 1 ]]; then return 0; fi
   if (( DRY_RUN )); then printf '+ render %s -> %s\n' "$source" "$destination"; return 0; fi
+  temporary="$destination.kab-new.$$"
   sed -e "s|@PREFIX@|$PREFIX|g" \
       -e "s|@HOME@|$TERMUX_HOME|g" \
       -e "s|@DATA_DIR@|$DATA_DIR|g" \
@@ -276,7 +346,13 @@ render_template() {
       -e "s|@WEB_PORT@|$WEB_PORT|g" \
       -e "s|@SERVICE@|${CURRENT_SERVICE:-service}|g" \
       -e "s|@SERVICES@|${SERVICE_NAMES:-klipper-android-bridge klipper}|g" \
-      "$source" >"$destination"
+      "$source" >"$temporary"
+  if [[ -e "$destination" ]] && cmp -s "$temporary" "$destination"; then
+    rm -f -- "$temporary"
+    return 0
+  fi
+  prepare_update_mutation
+  mv -f -- "$temporary" "$destination"
 }
 
 log "Creating configuration and runit services"
@@ -295,6 +371,7 @@ if (( INSTALL_MOONRAKER )); then
     if (( DRY_RUN )); then
       printf '+ add Termux [machine] provider to %s\n' "$MOONRAKER_CONFIG"
     else
+      prepare_update_mutation
       printf '\n# Added by klipper-android for native Termux.\n[machine]\nprovider: none\nvalidate_service: False\nvalidate_config: False\n' \
         >>"$MOONRAKER_CONFIG"
     fi
@@ -320,24 +397,42 @@ if (( INSTALL_MOONRAKER )); then
 fi
 
 if (( INSTALL_UI )); then
-  log "Installing Mainsail"
+  MAINSAIL_MARKER="$STATE_DIR/mainsail-release"
+  MAINSAIL_RELEASE="$MAINSAIL_VERSION:$MAINSAIL_SHA256"
+  INSTALL_MAINSAIL=1
+  if (( ! DRY_RUN )) && [[ ! -f "$MAINSAIL_MARKER" && -f "$MAINSAIL_DIR/index.html" && \
+      "$CHANNEL" == stable && "$PREVIOUS_MAINSAIL_RELEASE" == "$MAINSAIL_RELEASE" ]]; then
+    printf '%s\n' "$MAINSAIL_RELEASE" >"$MAINSAIL_MARKER"
+  fi
+  if (( ! DRY_RUN )) && [[ "$CHANNEL" == stable && -f "$MAINSAIL_DIR/index.html" && \
+      -f "$MAINSAIL_MARKER" && "$(<"$MAINSAIL_MARKER")" == "$MAINSAIL_RELEASE" ]]; then
+    INSTALL_MAINSAIL=0
+  fi
   MAINSAIL_ARCHIVE="$STATE_DIR/mainsail.zip"
   if [[ "$CHANNEL" == stable ]]; then
     MAINSAIL_URL="https://github.com/mainsail-crew/mainsail/releases/download/$MAINSAIL_VERSION/mainsail.zip"
   else
     MAINSAIL_URL="https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip"
   fi
-  run curl -fL "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE"
-  if [[ "$CHANNEL" == stable && -n "$MAINSAIL_SHA256" ]]; then
-    if (( DRY_RUN )); then
-      printf '+ verify sha256 %s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE"
-    else
-      printf '%s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE" | sha256sum -c -
+  if (( INSTALL_MAINSAIL )); then
+    log "Installing Mainsail $MAINSAIL_VERSION"
+    run curl -fL "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE"
+    if [[ "$CHANNEL" == stable && -n "$MAINSAIL_SHA256" ]]; then
+      if (( DRY_RUN )); then
+        printf '+ verify sha256 %s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE"
+      else
+        printf '%s  %s\n' "$MAINSAIL_SHA256" "$MAINSAIL_ARCHIVE" | sha256sum -c -
+      fi
     fi
+    prepare_update_mutation
+    [[ ! -d "$MAINSAIL_DIR" ]] || run rm -rf -- "$MAINSAIL_DIR"
+    run mkdir -p "$MAINSAIL_DIR"
+    run unzip -o "$MAINSAIL_ARCHIVE" -d "$MAINSAIL_DIR"
+    run rm -f -- "$MAINSAIL_ARCHIVE"
+    if (( ! DRY_RUN )); then printf '%s\n' "$MAINSAIL_RELEASE" >"$MAINSAIL_MARKER"; fi
+  else
+    log "Mainsail $MAINSAIL_VERSION is already installed"
   fi
-  run mkdir -p "$MAINSAIL_DIR"
-  run unzip -o "$MAINSAIL_ARCHIVE" -d "$MAINSAIL_DIR"
-  run rm -f -- "$MAINSAIL_ARCHIVE"
   render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf"
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi
@@ -380,12 +475,13 @@ if (( ENABLE_APP_CONTROL )); then
 fi
 
 if (( ! DRY_RUN )); then
-  MANIFEST="$STATE_DIR/install-manifest"
+  MANIFEST="$INSTALL_MANIFEST"
   {
     printf 'installed_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'channel=%s\ninstance=%s\ndata_dir=%s\n' "$CHANNEL" "$INSTANCE" "$DATA_DIR"
     git -C "$KLIPPER_DIR" rev-parse HEAD | sed 's/^/klipper_commit=/'
     (( INSTALL_MOONRAKER )) && git -C "$MOONRAKER_DIR" rev-parse HEAD | sed 's/^/moonraker_commit=/'
+    (( INSTALL_UI )) && printf 'mainsail_release=%s\n' "$MAINSAIL_RELEASE"
   } >"$MANIFEST"
 fi
 

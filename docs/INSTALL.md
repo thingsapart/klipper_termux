@@ -116,12 +116,18 @@ and the Mainsail archive is deleted after extraction.
 
 Rerunning the installer detects an existing managed installation and asks for
 `UPDATE` or `DELETE` in the Termux terminal. Update stops the running stack,
-refreshes shallow source checkouts, virtual environments, generated service
-scripts, bridge utilities, and Mainsail, then restarts the stack if it was
-previously running. It preserves printer configuration, gcodes, database, and
-logs. Delete performs a clean reinstall and removes all of those managed files.
-Both modes preserve Termux packages, `~/.termux/termux.properties`, and
-unrelated files. Automation may pass `--update` or `--reinstall` explicitly;
+checks the bridge project for a newer revision, and fetches Klipper or Moonraker
+only when the selected revision is not already present. The native bridge is
+rebuilt only when its C headers, sources, or build script changed. Existing
+virtual environments are retained; pip is rerun against them and reuses
+already-satisfied packages, changing only dependencies required by the current
+requirements files. A missing or broken environment is recreated. Mainsail is
+downloaded only when its pinned release changed. Generated service scripts are
+refreshed, and a previously running stack is restarted. Configuration, gcodes,
+database, and logs are preserved. Delete performs a clean reinstall and removes
+all managed files.
+Both modes preserve Termux packages, `~/.termux/termux.properties`, and unrelated
+files. Automation may pass `--update` or `--reinstall` explicitly;
 `--non-interactive` without either mode refuses to change an existing install.
 
 ## Operational requirements
