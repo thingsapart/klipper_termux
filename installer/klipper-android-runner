@@ -1,0 +1,69 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+
+SERVICES=(@SERVICES@)
+PREFIX="@PREFIX@"
+export SVDIR="$PREFIX/var/service"
+export LOGDIR="$PREFIX/var/log"
+
+ensure_supervisor() {
+  local pidfile="$PREFIX/var/run/service-daemon.pid" pid=""
+  [[ -r "$pidfile" ]] && read -r pid <"$pidfile"
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+    service-daemon start >/dev/null
+  fi
+}
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: klipper-android-runner {start|stop|restart|status|monitor|enable|disable}
+
+start/stop operate the installed stack. Runit continues monitoring and
+restarting each service after this command exits. monitor is only a live view.
+EOF
+}
+
+reverse_services() {
+  local index
+  for ((index=${#SERVICES[@]} - 1; index >= 0; index--)); do
+    printf '%s\n' "${SERVICES[index]}"
+  done
+}
+
+case "${1:-status}" in
+  start)
+    ensure_supervisor
+    sv up "${SERVICES[@]}"
+    sv status "${SERVICES[@]}" || true
+    ;;
+  stop)
+    ensure_supervisor
+    mapfile -t reversed < <(reverse_services)
+    sv down "${reversed[@]}"
+    ;;
+  restart)
+    ensure_supervisor
+    sv restart "${SERVICES[@]}"
+    ;;
+  status)
+    ensure_supervisor
+    sv status "${SERVICES[@]}" || true
+    ;;
+  monitor)
+    ensure_supervisor
+    while true; do
+      clear 2>/dev/null || true
+      date
+      sv status "${SERVICES[@]}" || true
+      sleep 2
+    done
+    ;;
+  enable)
+    ensure_supervisor
+    for service in "${SERVICES[@]}"; do sv-enable "$service"; done
+    ;;
+  disable)
+    while IFS= read -r service; do sv-disable "$service"; done < <(reverse_services)
+    ;;
+  *) usage; exit 2 ;;
+esac

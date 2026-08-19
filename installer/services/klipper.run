@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/sh
+exec 2>&1
+PTY="@PREFIX@/var/run/klipper-android/main"
+while [ ! -e "$PTY" ]; do
+  echo "waiting for bridge PTY $PTY"
+  sleep 2
+done
+mkdir -p "@DATA_DIR@/comms" "@DATA_DIR@/logs"
+exec "@HOME@/klippy-env/bin/python" "@HOME@/klipper/klippy/klippy.py" \
+  "@DATA_DIR@/config/printer.cfg" \
+  -a "@DATA_DIR@/comms/klippy.sock" \
+  -l "@DATA_DIR@/logs/klippy.log"
+

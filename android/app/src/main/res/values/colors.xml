@@ -1,0 +1,15 @@
+<resources>
+    <color name="mainsail_surface">#0E1013</color>
+    <color name="mainsail_surface_raised">#181B20</color>
+    <color name="mainsail_panel_header">#21252A</color>
+    <color name="mainsail_border">#2C3138</color>
+    <color name="mainsail_primary">#2196F3</color>
+    <color name="mainsail_primary_pressed">#1976D2</color>
+    <color name="mainsail_success">#4CAF50</color>
+    <color name="mainsail_warning">#FFB300</color>
+    <color name="mainsail_error">#EF5350</color>
+    <color name="mainsail_text_primary">#F5F5F5</color>
+    <color name="mainsail_text_secondary">#B6B6B6</color>
+    <color name="mainsail_text_muted">#8A8F98</color>
+    <color name="mainsail_button_text">#FFFFFF</color>
+</resources>

@@ -1,0 +1,69 @@
+# Gradle and Kotlin
+.gradle/
+**/.gradle/
+.kotlin/
+**/build/
+
+# Android local configuration and generated packages
+local.properties
+**/local.properties
+.externalNativeBuild/
+**/.externalNativeBuild/
+.cxx/
+**/.cxx/
+captures/
+dist/
+*.apk
+*.aab
+*.apks
+*.idsig
+
+# Signing material must never be committed
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# CMake, Ninja, and native compiler output
+/build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak

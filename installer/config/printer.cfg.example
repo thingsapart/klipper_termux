@@ -1,0 +1,11 @@
+# Replace this example with the configuration for the actual printer.
+[mcu]
+serial: @PREFIX@/var/run/klipper-android/main
+baud: 250000
+restart_method: command
+
+[printer]
+kinematics: none
+max_velocity: 1000
+max_accel: 1000
+

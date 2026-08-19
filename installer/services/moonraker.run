@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/sh
+exec 2>&1
+mkdir -p "@DATA_DIR@/logs"
+exec "@HOME@/moonraker-env/bin/python" -m moonraker \
+  -d "@DATA_DIR@" \
+  -c "@DATA_DIR@/config/moonraker.conf" \
+  -l "@DATA_DIR@/logs/moonraker.log"
+

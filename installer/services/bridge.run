@@ -1,0 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/sh
+exec 2>&1
+CONFIG="@DATA_DIR@/config/bridge.conf"
+while [ ! -f "$CONFIG" ]; do
+  echo "waiting for $CONFIG"
+  sleep 30
+done
+mkdir -p "@PREFIX@/var/run/klipper-android"
+exec "@HOME@/.local/bin/klipper-android-bridge" "$CONFIG"

@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/sh
+exec 2>&1
+exec nginx -c "@DATA_DIR@/config/nginx.conf" -p "@DATA_DIR@"
+

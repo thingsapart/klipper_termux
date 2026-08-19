@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Broad discovery is intentional; supported ports are filtered by the driver library. -->
+    <usb-device />
+</resources>
+

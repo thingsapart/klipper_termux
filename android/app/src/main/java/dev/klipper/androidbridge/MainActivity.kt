@@ -1,0 +1,962 @@
+package dev.klipper.androidbridge
+
+import android.Manifest
+import android.app.Activity
+import android.app.AlertDialog
+import android.app.PendingIntent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.hardware.usb.UsbManager
+import android.net.Uri
+import android.net.http.SslError
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.graphics.Typeface
+import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.View
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.EditText
+import android.widget.PopupMenu
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
+import androidx.drawerlayout.widget.DrawerLayout
+import androidx.core.view.GravityCompat
+import com.hoho.android.usbserial.driver.UsbSerialProber
+import dev.klipper.androidbridge.bridge.BridgeState
+import dev.klipper.androidbridge.bridge.DeviceRepository
+import dev.klipper.androidbridge.bridge.ExternalWebAddress
+import dev.klipper.androidbridge.bridge.MainsailAddress
+import dev.klipper.androidbridge.bridge.UsbBridgeService
+import dev.klipper.androidbridge.bridge.toHex
+import java.util.UUID
+
+class MainActivity : Activity() {
+    private lateinit var repository: DeviceRepository
+    private lateinit var usbManager: UsbManager
+    private lateinit var status: TextView
+    private lateinit var serviceBadge: TextView
+    private lateinit var pairing: TextView
+    private lateinit var installerCommandView: TextView
+    private lateinit var installerNote: TextView
+    private lateinit var devices: LinearLayout
+    private lateinit var dashboardPage: View
+    private lateinit var mainsailPage: View
+    private lateinit var setupPage: View
+    private lateinit var settingsPage: View
+    private lateinit var drawerLayout: DrawerLayout
+    private lateinit var primaryToggle: ImageButton
+    private lateinit var overflowButton: ImageButton
+    private lateinit var webProgress: ProgressBar
+    private lateinit var mainsailContainer: FrameLayout
+    private lateinit var mainsailError: View
+    private lateinit var mainsailErrorMessage: TextView
+    private lateinit var mainsailUrlInput: EditText
+    private lateinit var termuxDownloadUrlInput: EditText
+    private lateinit var termuxGithubReleasesUrlInput: EditText
+    private lateinit var drawerDashboard: TextView
+    private lateinit var drawerMainsail: TextView
+    private lateinit var drawerSettings: TextView
+    private lateinit var summaryBridgeDot: TextView
+    private lateinit var summaryBridgeState: TextView
+    private lateinit var summaryTermuxDot: TextView
+    private lateinit var summaryTermuxState: TextView
+    private lateinit var summaryUsbDot: TextView
+    private lateinit var summaryUsbState: TextView
+    private lateinit var summaryDataDot: TextView
+    private lateinit var summaryDataState: TextView
+    private lateinit var statusBridgeSwitch: View
+    private lateinit var statusTermuxSwitch: View
+    private lateinit var statusUsbSwitch: View
+    private lateinit var statusDataSwitch: View
+    private var destination = Destination.DASHBOARD
+    private var previousPrimary = Destination.DASHBOARD
+    private var webView: WebView? = null
+    private var pendingWebState: Bundle? = null
+    private lateinit var wizardHeaders: List<View>
+    private lateinit var wizardBodies: List<View>
+    private lateinit var wizardStateViews: List<TextView>
+    private lateinit var wizardProgress: TextView
+    private var lastNextWizardStep = -2
+    private var mainsailPageFailed = false
+    private var installerIsConfigured = false
+    private val handler = Handler(Looper.getMainLooper())
+    private val previousBytes = mutableMapOf<UUID, Triple<Long, Long, Long>>()
+    private val refresh = object : Runnable {
+        override fun run() {
+            render()
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        repository = DeviceRepository(this)
+        usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+        status = findViewById(R.id.service_status)
+        serviceBadge = findViewById(R.id.service_badge)
+        pairing = findViewById(R.id.pairing_command)
+        installerCommandView = findViewById(R.id.installer_command)
+        installerNote = findViewById(R.id.installer_note)
+        devices = findViewById(R.id.device_list)
+        dashboardPage = findViewById(R.id.dashboard_page)
+        mainsailPage = findViewById(R.id.mainsail_page)
+        setupPage = findViewById(R.id.setup_page)
+        settingsPage = findViewById(R.id.settings_page)
+        drawerLayout = findViewById(R.id.drawer_layout)
+        primaryToggle = findViewById(R.id.primary_toggle)
+        overflowButton = findViewById(R.id.overflow_button)
+        webProgress = findViewById(R.id.web_progress)
+        mainsailContainer = findViewById(R.id.mainsail_container)
+        mainsailError = findViewById(R.id.mainsail_error)
+        mainsailErrorMessage = findViewById(R.id.mainsail_error_message)
+        mainsailUrlInput = findViewById(R.id.mainsail_url)
+        termuxDownloadUrlInput = findViewById(R.id.termux_download_url)
+        termuxGithubReleasesUrlInput = findViewById(R.id.termux_github_releases_url)
+        drawerDashboard = findViewById(R.id.drawer_dashboard)
+        drawerMainsail = findViewById(R.id.drawer_mainsail)
+        drawerSettings = findViewById(R.id.drawer_settings)
+        wizardHeaders = listOf(
+            findViewById(R.id.wizard_termux_header),
+            findViewById(R.id.wizard_permission_header),
+            findViewById(R.id.wizard_install_header),
+            findViewById(R.id.wizard_bridge_header),
+            findViewById(R.id.wizard_verify_header),
+        )
+        wizardBodies = listOf(
+            findViewById(R.id.wizard_termux_body),
+            findViewById(R.id.wizard_permission_body),
+            findViewById(R.id.wizard_install_body),
+            findViewById(R.id.wizard_bridge_body),
+            findViewById(R.id.wizard_verify_body),
+        )
+        wizardStateViews = listOf(
+            findViewById(R.id.wizard_termux_state),
+            findViewById(R.id.wizard_permission_state),
+            findViewById(R.id.wizard_install_state),
+            findViewById(R.id.wizard_bridge_state),
+            findViewById(R.id.wizard_verify_state),
+        )
+        wizardProgress = findViewById(R.id.wizard_progress)
+        summaryBridgeDot = findViewById(R.id.summary_bridge_dot)
+        summaryBridgeState = findViewById(R.id.summary_bridge_state)
+        summaryTermuxDot = findViewById(R.id.summary_termux_dot)
+        summaryTermuxState = findViewById(R.id.summary_termux_state)
+        summaryUsbDot = findViewById(R.id.summary_usb_dot)
+        summaryUsbState = findViewById(R.id.summary_usb_state)
+        summaryDataDot = findViewById(R.id.summary_data_dot)
+        summaryDataState = findViewById(R.id.summary_data_state)
+        statusBridgeSwitch = findViewById(R.id.status_bridge_switch)
+        statusTermuxSwitch = findViewById(R.id.status_termux_switch)
+        statusUsbSwitch = findViewById(R.id.status_usb_switch)
+        statusDataSwitch = findViewById(R.id.status_data_switch)
+        statusBridgeSwitch.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (BridgeState.serviceRunning) {
+                confirmStopBridge()
+            } else {
+                startBridge()
+            }
+        }
+        statusTermuxSwitch.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (BridgeState.snapshots().isEmpty()) runTermux("start") else confirmStopStack()
+        }
+        statusUsbSwitch.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
+            when {
+                driver == null -> Toast.makeText(this, "No USB serial device attached", Toast.LENGTH_SHORT).show()
+                !usbManager.hasPermission(driver.device) -> requestUsbPermission(driver.device)
+                else -> Toast.makeText(this, "USB access is ready", Toast.LENGTH_SHORT).show()
+            }
+        }
+        statusDataSwitch.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            Toast.makeText(this, "Blue indicates traffic within the last 1.5 seconds", Toast.LENGTH_SHORT).show()
+        }
+        findViewById<View>(R.id.nav_button).setOnClickListener { drawerLayout.openDrawer(GravityCompat.START) }
+        drawerDashboard.setOnClickListener { selectFromDrawer(Destination.DASHBOARD) }
+        drawerMainsail.setOnClickListener { selectFromDrawer(Destination.MAINSAIL) }
+        drawerSettings.setOnClickListener { selectFromDrawer(Destination.SETTINGS) }
+        findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { navigate(Destination.SETUP) }
+        wizardHeaders.forEachIndexed { index, header ->
+            header.setOnClickListener {
+                wizardBodies[index].visibility = if (
+                    wizardBodies[index].visibility == View.VISIBLE
+                ) View.GONE else View.VISIBLE
+            }
+        }
+        primaryToggle.setOnClickListener { navigate(AppNavigation.toggle(destination)) }
+        overflowButton.setOnClickListener { showOverflow(it) }
+        mainsailUrlInput.setText(repository.mainsailUrl())
+        findViewById<Button>(R.id.save_mainsail_url).setOnClickListener { saveMainsailUrl() }
+        termuxDownloadUrlInput.setText(repository.termuxDownloadUrl(BuildConfig.TERMUX_DOWNLOAD_URL))
+        termuxGithubReleasesUrlInput.setText(
+            repository.termuxGithubReleasesUrl(BuildConfig.TERMUX_GITHUB_RELEASES_URL),
+        )
+        findViewById<Button>(R.id.open_termux_download).setOnClickListener {
+            openConfiguredLink(termuxDownloadUrlInput)
+        }
+        findViewById<Button>(R.id.open_termux_github_releases).setOnClickListener {
+            openConfiguredLink(termuxGithubReleasesUrlInput)
+        }
+        findViewById<Button>(R.id.save_termux_links).setOnClickListener { saveTermuxLinks() }
+        findViewById<Button>(R.id.wizard_open_termux_download).setOnClickListener {
+            openConfiguredLink(termuxDownloadUrlInput)
+        }
+        findViewById<Button>(R.id.wizard_open_termux_github).setOnClickListener {
+            openConfiguredLink(termuxGithubReleasesUrlInput)
+        }
+        findViewById<Button>(R.id.wizard_grant_permission).setOnClickListener {
+            if (!TermuxRunner.isInstalled(this)) {
+                openConfiguredLink(termuxDownloadUrlInput)
+            } else {
+                requestPermissions(arrayOf(TermuxRunner.PERMISSION), 11)
+            }
+        }
+        findViewById<Button>(R.id.wizard_send_pairing).setOnClickListener { sendPairingToTermux() }
+        findViewById<Button>(R.id.wizard_usb_action).setOnClickListener { prepareUsbBridge() }
+        findViewById<Button>(R.id.wizard_start_stack).setOnClickListener {
+            startBridge()
+            runTermux("start")
+        }
+        findViewById<Button>(R.id.wizard_open_mainsail).setOnClickListener {
+            navigate(Destination.MAINSAIL)
+        }
+        findViewById<Button>(R.id.retry_mainsail).setOnClickListener { loadMainsail() }
+        findViewById<Button>(R.id.start_stack_from_web).setOnClickListener {
+            startBridge()
+            runTermux("start")
+            handler.postDelayed({ loadMainsail() }, 1200)
+        }
+        findViewById<Button>(R.id.web_open_setup).setOnClickListener { navigate(Destination.SETUP) }
+        findViewById<Button>(R.id.web_open_external).setOnClickListener { openExternal(repository.mainsailUrl()) }
+        findViewById<Button>(R.id.start_service).setOnClickListener { startBridge() }
+        findViewById<Button>(R.id.stop_service).setOnClickListener {
+            stopService(Intent(this, UsbBridgeService::class.java))
+        }
+        findViewById<Button>(R.id.start_termux).setOnClickListener {
+            startBridge()
+            runTermux("start")
+        }
+        findViewById<Button>(R.id.stop_termux).setOnClickListener { runTermux("stop") }
+        findViewById<Button>(R.id.regenerate_token).setOnClickListener {
+            repository.regenerateToken()
+            render()
+        }
+        pairing.setOnClickListener {
+            copyToClipboard("Termux bridge config", pairing.text, "Pairing configuration copied")
+        }
+        val installerCommand = InstallerCommand.create(
+            BuildConfig.KAB_INSTALLER_URL,
+            BuildConfig.KAB_REPOSITORY_URL,
+        )
+        installerIsConfigured = InstallerCommand.isConfigured(
+            BuildConfig.KAB_INSTALLER_URL,
+            BuildConfig.KAB_REPOSITORY_URL,
+        )
+        installerCommandView.text = installerCommand
+        installerCommandView.setOnClickListener {
+            copyToClipboard("Termux installer", installerCommand, "Installer command copied")
+        }
+        findViewById<Button>(R.id.install_termux).apply {
+            isEnabled = installerIsConfigured
+            setOnClickListener {
+                val result = TermuxRunner.install(this@MainActivity, installerCommand)
+                if (result == TermuxRunner.Result.SENT) repository.markInstallerAttempted()
+                handleTermuxResult(result, "Termux installer started")
+                renderWizard()
+            }
+        }
+        if (!installerIsConfigured) {
+            installerNote.text = getString(R.string.installer_not_published)
+            installerNote.setTextColor(getColor(R.color.mainsail_warning))
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 10)
+        }
+        pendingWebState = savedInstanceState?.getBundle(KEY_WEB_STATE)
+        destination = savedInstanceState?.getString(KEY_DESTINATION)
+            ?.let { runCatching { Destination.valueOf(it) }.getOrNull() }
+            ?: Destination.DASHBOARD
+        previousPrimary = savedInstanceState?.getString(KEY_PRIMARY)
+            ?.let { runCatching { Destination.valueOf(it) }.getOrNull() }
+            ?.takeIf { it != Destination.SETUP && it != Destination.SETTINGS }
+            ?: Destination.DASHBOARD
+        navigate(destination, rememberPrimary = false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView?.onResume()
+        handler.post(refresh)
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(refresh)
+        webView?.onPause()
+        super.onPause()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(KEY_DESTINATION, destination.name)
+        outState.putString(KEY_PRIMARY, previousPrimary.name)
+        webView?.let { view ->
+            outState.putBundle(KEY_WEB_STATE, Bundle().also(view::saveState))
+        }
+    }
+
+    override fun onDestroy() {
+        webView?.let {
+            mainsailContainer.removeView(it)
+            it.stopLoading()
+            it.destroy()
+        }
+        webView = null
+        super.onDestroy()
+    }
+
+    @Deprecated("Use Android's back dispatcher")
+    override fun onBackPressed() {
+        when (AppNavigation.backAction(
+            drawerLayout.isDrawerOpen(GravityCompat.START),
+            destination,
+            webView?.canGoBack() == true,
+        )) {
+            BackAction.CLOSE_DRAWER -> drawerLayout.closeDrawer(GravityCompat.START)
+            BackAction.WEB_HISTORY -> webView?.goBack()
+            BackAction.DASHBOARD -> navigate(Destination.DASHBOARD)
+            BackAction.PRIMARY -> navigate(previousPrimary)
+            BackAction.SETTINGS -> navigate(Destination.SETTINGS)
+            BackAction.EXIT -> super.onBackPressed()
+        }
+    }
+
+    private fun startBridge() {
+        val intent = Intent(this, UsbBridgeService::class.java)
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+    }
+
+    private fun runTermux(command: String) {
+        handleTermuxResult(TermuxRunner.invoke(this, command), "Termux stack command sent: $command")
+    }
+
+    private fun handleTermuxResult(result: TermuxRunner.Result, sentMessage: String) {
+        when (result) {
+            TermuxRunner.Result.SENT -> Toast.makeText(
+                this, sentMessage, Toast.LENGTH_SHORT,
+            ).show()
+            TermuxRunner.Result.PERMISSION_REQUIRED -> {
+                requestPermissions(arrayOf(TermuxRunner.PERMISSION), 11)
+                Toast.makeText(
+                    this,
+                    "Grant Termux command permission, then tap again",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            TermuxRunner.Result.TERMUX_UNAVAILABLE -> Toast.makeText(
+                this,
+                "Termux is unavailable or external commands are disabled",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun sendPairingToTermux() {
+        val result = TermuxRunner.configureBridge(
+            this,
+            repository.token().toHex(),
+            repository.port(),
+        )
+        if (result == TermuxRunner.Result.SENT) repository.markPairingSent()
+        handleTermuxResult(result, "Bridge token and port sent to Termux")
+        renderWizard()
+    }
+
+    private fun prepareUsbBridge() {
+        val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
+        when {
+            driver == null -> Toast.makeText(
+                this,
+                "Connect the printer through USB OTG, then try again",
+                Toast.LENGTH_LONG,
+            ).show()
+            !usbManager.hasPermission(driver.device) -> requestUsbPermission(driver.device)
+            else -> {
+                repository.profileFor(driver.device, driver.ports.first().portNumber, create = true)
+                startBridge()
+                Toast.makeText(this, "USB is ready; starting the bridge", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private enum class WizardStatus { COMPLETE, ATTEMPTED, PENDING }
+
+    private fun renderWizard() {
+        if (!::wizardHeaders.isInitialized) return
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val bridgeConnected = BridgeState.snapshots().isNotEmpty()
+        val usbReady = drivers.any { usbManager.hasPermission(it.device) }
+        val mainsailReady = repository.mainsailSeen()
+        val statuses = listOf(
+            if (TermuxRunner.isInstalled(this)) WizardStatus.COMPLETE else WizardStatus.PENDING,
+            if (checkSelfPermission(TermuxRunner.PERMISSION) == PackageManager.PERMISSION_GRANTED) {
+                WizardStatus.COMPLETE
+            } else WizardStatus.PENDING,
+            when {
+                bridgeConnected || mainsailReady -> WizardStatus.COMPLETE
+                repository.installerAttempted() -> WizardStatus.ATTEMPTED
+                else -> WizardStatus.PENDING
+            },
+            when {
+                bridgeConnected -> WizardStatus.COMPLETE
+                repository.pairingSent() || usbReady -> WizardStatus.ATTEMPTED
+                else -> WizardStatus.PENDING
+            },
+            if (mainsailReady) WizardStatus.COMPLETE else WizardStatus.PENDING,
+        )
+        val next = statuses.indexOfFirst { it != WizardStatus.COMPLETE }
+        val completed = statuses.count { it == WizardStatus.COMPLETE }
+        wizardProgress.text = if (completed == statuses.size) {
+            "Setup complete · $completed/${statuses.size} steps verified"
+        } else {
+            "$completed/${statuses.size} steps verified · Step ${next + 1} is next"
+        }
+        statuses.forEachIndexed { index, status ->
+            val isNext = index == next
+            wizardHeaders[index].setBackgroundResource(
+                when {
+                    status == WizardStatus.COMPLETE -> R.drawable.bg_wizard_complete
+                    isNext -> R.drawable.bg_wizard_next
+                    status == WizardStatus.ATTEMPTED -> R.drawable.bg_wizard_attempted
+                    else -> R.drawable.bg_panel_header
+                },
+            )
+            wizardStateViews[index].apply {
+                text = when {
+                    status == WizardStatus.COMPLETE -> "✓ COMPLETE"
+                    status == WizardStatus.ATTEMPTED && isNext -> "ATTEMPTED · NEXT"
+                    status == WizardStatus.ATTEMPTED -> "ATTEMPTED"
+                    isNext -> "NEXT"
+                    else -> "PENDING"
+                }
+                setTextColor(getColor(
+                    when {
+                        status == WizardStatus.COMPLETE -> R.color.mainsail_success
+                        isNext -> R.color.mainsail_primary
+                        status == WizardStatus.ATTEMPTED -> R.color.mainsail_warning
+                        else -> R.color.mainsail_text_muted
+                    },
+                ))
+            }
+        }
+        if (next != lastNextWizardStep) {
+            wizardBodies.forEachIndexed { index, body ->
+                body.visibility = if (index == next || (next == -1 && index == statuses.lastIndex)) {
+                    View.VISIBLE
+                } else View.GONE
+            }
+            lastNextWizardStep = next
+        }
+        findViewById<Button>(R.id.wizard_grant_permission).isEnabled = TermuxRunner.isInstalled(this)
+        findViewById<Button>(R.id.wizard_send_pairing).isEnabled = repository.installerAttempted() ||
+            bridgeConnected || mainsailReady
+    }
+
+    private fun selectFromDrawer(selected: Destination) {
+        drawerLayout.closeDrawer(GravityCompat.START)
+        navigate(selected)
+    }
+
+    private fun navigate(selected: Destination, rememberPrimary: Boolean = true) {
+        destination = selected
+        if (rememberPrimary && selected != Destination.SETUP && selected != Destination.SETTINGS) {
+            previousPrimary = selected
+        }
+        if (selected == Destination.MAINSAIL) ensureWebView()
+        dashboardPage.visibility = if (selected == Destination.DASHBOARD) View.VISIBLE else View.GONE
+        mainsailPage.visibility = if (selected == Destination.MAINSAIL) View.VISIBLE else View.GONE
+        setupPage.visibility = if (selected == Destination.SETUP) View.VISIBLE else View.GONE
+        settingsPage.visibility = if (selected == Destination.SETTINGS) View.VISIBLE else View.GONE
+        val primaryPage = selected == Destination.DASHBOARD || selected == Destination.MAINSAIL
+        primaryToggle.visibility = if (primaryPage) View.VISIBLE else View.GONE
+        overflowButton.visibility = if (primaryPage) View.VISIBLE else View.GONE
+        primaryToggle.setImageResource(
+            if (selected == Destination.MAINSAIL) R.drawable.ic_dashboard else R.drawable.ic_web,
+        )
+        primaryToggle.contentDescription = getString(
+            if (selected == Destination.MAINSAIL) R.string.open_dashboard else R.string.open_mainsail,
+        )
+        drawerDashboard.isSelected = selected == Destination.DASHBOARD
+        drawerMainsail.isSelected = selected == Destination.MAINSAIL
+        drawerSettings.isSelected = selected == Destination.SETTINGS || selected == Destination.SETUP
+        if (selected == Destination.SETUP) renderWizard()
+    }
+
+    private fun showOverflow(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add(0, MENU_SETUP, 0, R.string.settings)
+            if (destination == Destination.MAINSAIL) {
+                menu.add(0, MENU_RELOAD, 1, R.string.reload)
+                menu.add(0, MENU_BROWSER, 2, R.string.open_in_browser)
+            }
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    MENU_SETUP -> navigate(Destination.SETTINGS)
+                    MENU_RELOAD -> loadMainsail()
+                    MENU_BROWSER -> openExternal(repository.mainsailUrl())
+                }
+                true
+            }
+            show()
+        }
+    }
+
+    private fun saveMainsailUrl() {
+        runCatching { repository.setMainsailUrl(mainsailUrlInput.text.toString()) }
+            .onSuccess { url ->
+                mainsailUrlInput.error = null
+                mainsailUrlInput.setText(url)
+                webView?.clearHistory()
+                webView?.loadUrl(url)
+                Toast.makeText(this, "Mainsail address saved", Toast.LENGTH_SHORT).show()
+            }
+            .onFailure { mainsailUrlInput.error = it.message ?: "Invalid loopback URL" }
+    }
+
+    private fun saveTermuxLinks() {
+        runCatching {
+            repository.setTermuxLinks(
+                termuxDownloadUrlInput.text.toString(),
+                termuxGithubReleasesUrlInput.text.toString(),
+            )
+        }.onSuccess { (download, releases) ->
+            termuxDownloadUrlInput.error = null
+            termuxGithubReleasesUrlInput.error = null
+            termuxDownloadUrlInput.setText(download)
+            termuxGithubReleasesUrlInput.setText(releases)
+            Toast.makeText(this, "Termux download links saved", Toast.LENGTH_SHORT).show()
+        }.onFailure {
+            Toast.makeText(this, it.message ?: "Invalid download URL", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openConfiguredLink(input: EditText) {
+        runCatching { ExternalWebAddress.normalize(input.text.toString()) }
+            .onSuccess {
+                input.error = null
+                openExternal(it)
+            }
+            .onFailure { input.error = it.message ?: "Invalid HTTPS URL" }
+    }
+
+    private fun ensureWebView(): WebView {
+        webView?.let { return it }
+        val view = WebView(this).apply {
+            setBackgroundColor(getColor(R.color.mainsail_surface))
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                allowContentAccess = false
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                mediaPlaybackRequiresUserGesture = false
+                setSupportMultipleWindows(false)
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, progress: Int) {
+                    webProgress.progress = progress
+                    webProgress.visibility = if (
+                        destination == Destination.MAINSAIL && progress in 0..99
+                    ) View.VISIBLE else View.GONE
+                }
+            }
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val target = request.url.toString()
+                    if (MainsailAddress.isLoopbackUrl(target)) return false
+                    openExternal(target)
+                    return true
+                }
+
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    mainsailPageFailed = false
+                    mainsailError.visibility = View.GONE
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    webProgress.visibility = View.GONE
+                    if (!mainsailPageFailed && url != null && MainsailAddress.isLoopbackUrl(url)) {
+                        repository.markMainsailSeen()
+                        renderWizard()
+                    }
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: WebResourceError,
+                ) {
+                    if (request.isForMainFrame) {
+                        mainsailPageFailed = true
+                        showWebError(error.description.toString())
+                    }
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: WebResourceResponse,
+                ) {
+                    if (request.isForMainFrame && errorResponse.statusCode >= 400) {
+                        mainsailPageFailed = true
+                        showWebError("HTTP ${errorResponse.statusCode}")
+                    }
+                }
+
+                override fun onReceivedSslError(
+                    view: WebView,
+                    handler: SslErrorHandler,
+                    error: SslError,
+                ) {
+                    handler.cancel()
+                    mainsailPageFailed = true
+                    showWebError("TLS certificate validation failed")
+                }
+            }
+            setDownloadListener { url, _, _, _, _ -> openExternal(url) }
+        }
+        if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+        mainsailContainer.addView(
+            view,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        webView = view
+        val restored = pendingWebState?.let(view::restoreState) != null
+        pendingWebState = null
+        if (!restored) view.loadUrl(repository.mainsailUrl())
+        return view
+    }
+
+    private fun loadMainsail() {
+        mainsailError.visibility = View.GONE
+        ensureWebView().loadUrl(repository.mainsailUrl())
+    }
+
+    private fun showWebError(message: String) {
+        webProgress.visibility = View.GONE
+        mainsailErrorMessage.text = message
+        mainsailError.visibility = View.VISIBLE
+    }
+
+    private fun openExternal(rawUrl: String) {
+        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return
+        if (uri.scheme != "http" && uri.scheme != "https") {
+            Toast.makeText(this, "Unsupported link", Toast.LENGTH_SHORT).show()
+            return
+        }
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+            .onFailure { Toast.makeText(this, "No browser is available", Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun copyToClipboard(label: String, value: CharSequence, message: String) {
+        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+            .setPrimaryClip(ClipData.newPlainText(label, value))
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun confirmStopStack() {
+        AlertDialog.Builder(this)
+            .setTitle("Stop Klipper stack?")
+            .setMessage("This can interrupt an active print. The Android USB bridge will remain available.")
+            .setPositiveButton("Stop stack") { _, _ -> runTermux("stop") }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun confirmStopBridge() {
+        AlertDialog.Builder(this)
+            .setTitle("Stop USB bridge?")
+            .setMessage("This disconnects the printer MCU and can interrupt an active print.")
+            .setPositiveButton("Stop bridge") { _, _ ->
+                stopService(Intent(this, UsbBridgeService::class.java))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun render() {
+        val snapshots = BridgeState.snapshots().associateBy { it.deviceId }
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        renderWizard()
+        val now = System.currentTimeMillis()
+        val dataActive = snapshots.values.any { now - it.lastActivityMillis < 1500 }
+        statusBridgeSwitch.setBackgroundResource(
+            when {
+                BridgeState.listenerError != null -> R.drawable.pb86_switch_amber
+                BridgeState.serviceRunning -> R.drawable.pb86_switch_green
+                else -> R.drawable.pb86_switch_off
+            },
+        )
+        statusTermuxSwitch.setBackgroundResource(
+            if (snapshots.isEmpty()) R.drawable.pb86_switch_off else R.drawable.pb86_switch_green,
+        )
+        updateSummary(
+            summaryBridgeDot,
+            summaryBridgeState,
+            when {
+                BridgeState.listenerError != null -> "Error"
+                BridgeState.serviceRunning -> "Running"
+                else -> "Stopped"
+            },
+            when {
+                BridgeState.listenerError != null -> R.color.mainsail_error
+                BridgeState.serviceRunning -> R.color.mainsail_success
+                else -> R.color.mainsail_text_muted
+            },
+        )
+        updateSummary(
+            summaryTermuxDot,
+            summaryTermuxState,
+            if (snapshots.isEmpty()) "Waiting" else "${snapshots.size} link${if (snapshots.size == 1) "" else "s"}",
+            if (snapshots.isEmpty()) R.color.mainsail_text_muted else R.color.mainsail_success,
+        )
+        val usbPorts = drivers.sumOf { it.ports.size }
+        val usbPermission = drivers.any { usbManager.hasPermission(it.device) }
+        statusUsbSwitch.setBackgroundResource(
+            when {
+                usbPorts == 0 -> R.drawable.pb86_switch_off
+                usbPermission -> R.drawable.pb86_switch_green
+                else -> R.drawable.pb86_switch_amber
+            },
+        )
+        updateSummary(
+            summaryUsbDot,
+            summaryUsbState,
+            when {
+                usbPorts == 0 -> "Detached"
+                usbPermission -> "$usbPorts ready"
+                else -> "Permission"
+            },
+            when {
+                usbPorts == 0 -> R.color.mainsail_text_muted
+                usbPermission -> R.color.mainsail_success
+                else -> R.color.mainsail_warning
+            },
+        )
+        statusDataSwitch.setBackgroundResource(
+            if (dataActive) R.drawable.pb86_switch_blue else R.drawable.pb86_switch_off,
+        )
+        updateSummary(
+            summaryDataDot,
+            summaryDataState,
+            if (dataActive) "Active" else "Idle",
+            if (dataActive) R.color.mainsail_primary else R.color.mainsail_text_muted,
+        )
+        serviceBadge.apply {
+            text = if (BridgeState.serviceRunning) "RUNNING" else "STOPPED"
+            setTextColor(getColor(
+                if (BridgeState.serviceRunning) R.color.mainsail_success
+                else R.color.mainsail_text_secondary,
+            ))
+            setBackgroundResource(
+                if (BridgeState.serviceRunning) R.drawable.bg_status_chip
+                else R.drawable.bg_status_chip_off,
+            )
+        }
+        status.text = buildString {
+            append("Loopback listener  127.0.0.1:${repository.port()}")
+            BridgeState.listenerError?.let { append("\nListener error: $it") }
+            append("\n${snapshots.size} active Termux connection(s)")
+        }
+        pairing.text = getString(R.string.pairing_value, repository.token().toHex(), repository.port())
+        devices.removeAllViews()
+        if (drivers.isEmpty()) {
+            val empty = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(18), dp(16), dp(18))
+                setBackgroundResource(R.drawable.bg_card)
+                addView(textView("No supported USB serial device attached.", color = R.color.mainsail_text_secondary))
+                addView(textView("Connect a printer through USB OTG or a powered hub.", 13f, R.color.mainsail_text_muted))
+            }
+            devices.addView(empty)
+            return
+        }
+        for (driver in drivers) for (port in driver.ports) {
+            val profile = repository.profileFor(driver.device, port.portNumber, usbManager.hasPermission(driver.device))
+            val snapshot = profile?.let { snapshots[it.id] }
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            val header = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(13), dp(10), dp(13), dp(10))
+                setBackgroundResource(R.drawable.bg_panel_header)
+            }
+            header.addView(
+                textView(profile?.alias ?: "Unconfigured USB device", 17f, R.color.mainsail_text_primary).apply {
+                    typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            val connectionLabel = when {
+                !usbManager.hasPermission(driver.device) -> "USB ACCESS"
+                snapshot != null -> "CONNECTED"
+                else -> "IDLE"
+            }
+            header.addView(textView(
+                connectionLabel,
+                11f,
+                when {
+                    !usbManager.hasPermission(driver.device) -> R.color.mainsail_warning
+                    snapshot != null -> R.color.mainsail_success
+                    else -> R.color.mainsail_text_muted
+                },
+            ).apply {
+                setBackgroundResource(
+                    if (snapshot != null) R.drawable.bg_status_chip else R.drawable.bg_status_chip_off,
+                )
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            })
+            card.addView(header)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(14))
+                setBackgroundResource(R.drawable.bg_panel_body)
+            }
+            card.addView(content)
+            content.addView(textView(
+                "VID:PID %04x:%04x · port %d · %s\nPermission: %s · Bridge: %s".format(
+                    driver.device.vendorId, driver.device.productId, port.portNumber,
+                    driver.javaClass.simpleName,
+                    if (usbManager.hasPermission(driver.device)) "granted" else "required",
+                    if (snapshot != null) "connected" else "idle",
+                ),
+                13f,
+                R.color.mainsail_text_secondary,
+            ).apply { setPadding(0, dp(8), 0, 0) })
+            if (profile != null) content.addView(textView(
+                "Device ID  ${profile.id}", 12f, R.color.mainsail_text_muted,
+            ))
+            if (profile != null) {
+                content.addView(Button(this, null, 0, R.style.MainsailButtonSecondary).apply {
+                    text = "Rename"
+                    setOnClickListener { renameProfile(profile) }
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { gravity = Gravity.END; topMargin = dp(8) })
+            }
+            if (snapshot != null) {
+                val active = System.currentTimeMillis() - snapshot.lastActivityMillis < 1500
+                val now = System.currentTimeMillis()
+                val prior = previousBytes.put(
+                    snapshot.deviceId,
+                    Triple(now, snapshot.hostToUsbBytes, snapshot.usbToHostBytes),
+                )
+                val elapsed = ((prior?.let { now - it.first } ?: 1000L).coerceAtLeast(1L))
+                val txRate = prior?.let { (snapshot.hostToUsbBytes - it.second) * 1000 / elapsed } ?: 0
+                val rxRate = prior?.let { (snapshot.usbToHostBytes - it.third) * 1000 / elapsed } ?: 0
+                content.addView(textView(
+                    "${if (active) "●" else "○"}  TX  ${snapshot.hostToUsbBytes} B   ${txRate} B/s\n" +
+                        "${if (active) "●" else "○"}  RX  ${snapshot.usbToHostBytes} B   ${rxRate} B/s\n" +
+                        "USB writes ${snapshot.usbWrites}  ·  reads ${snapshot.usbReads}  ·  errors ${snapshot.errors}",
+                    13f,
+                    if (active) R.color.mainsail_primary else R.color.mainsail_text_secondary,
+                ).apply {
+                    typeface = Typeface.MONOSPACE
+                    setPadding(0, dp(10), 0, 0)
+                })
+            }
+            if (!usbManager.hasPermission(driver.device)) {
+                content.addView(Button(this, null, 0, R.style.MainsailButtonPrimary).apply {
+                    text = "Grant USB access"
+                    setOnClickListener { requestUsbPermission(driver.device) }
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(10) })
+            }
+            val layout = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { setMargins(0, dp(4), 0, dp(8)) }
+            devices.addView(card, layout)
+        }
+    }
+
+    private fun updateSummary(dot: TextView, state: TextView, value: String, color: Int) {
+        dot.setTextColor(getColor(color))
+        state.text = value
+        state.setTextColor(getColor(color))
+    }
+
+    private fun requestUsbPermission(device: android.hardware.usb.UsbDevice) {
+        val intent = Intent("$packageName.USB_PERMISSION").setPackage(packageName)
+        val pending = PendingIntent.getBroadcast(this, device.deviceId, intent, UsbBridgeService.pendingIntentFlags())
+        usbManager.requestPermission(device, pending)
+    }
+
+    private fun renameProfile(profile: dev.klipper.androidbridge.bridge.DeviceProfile) {
+        val input = EditText(this).apply {
+            setText(profile.alias)
+            selectAll()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Device alias")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                runCatching { repository.rename(profile, input.text.toString()) }
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun textView(
+        value: String,
+        size: Float = 14f,
+        color: Int = R.color.mainsail_text_secondary,
+    ): TextView = TextView(this).apply {
+        text = value
+        textSize = size
+        setTextColor(getColor(color))
+        setPadding(0, dp(2), 0, dp(2))
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    companion object {
+        private const val KEY_DESTINATION = "destination"
+        private const val KEY_PRIMARY = "primary_destination"
+        private const val KEY_WEB_STATE = "web_state"
+        private const val MENU_SETUP = 1
+        private const val MENU_RELOAD = 2
+        private const val MENU_BROWSER = 3
+    }
+}

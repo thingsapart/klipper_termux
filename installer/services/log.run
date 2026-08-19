@@ -1,0 +1,3 @@
+#!/data/data/com.termux/files/usr/bin/sh
+mkdir -p "@DATA_DIR@/logs/@SERVICE@"
+exec svlogd -tt "@DATA_DIR@/logs/@SERVICE@"

@@ -1,0 +1,35 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+DATA_DIR="@DATA_DIR@"
+PREFIX="@PREFIX@"
+
+case "${1:-status}" in
+  start|stop|monitor|enable|disable)
+    exec "@HOME@/.local/bin/klipper-android-runner" "$@"
+    ;;
+  status)
+    sv status klipper-android-bridge klipper moonraker klipper-web 2>/dev/null || true
+    ;;
+  doctor)
+    failures=0
+    check() { if "$@"; then printf 'ok   %s\n' "$*"; else printf 'FAIL %s\n' "$*"; failures=$((failures + 1)); fi; }
+    check test -x "@HOME@/.local/bin/klipper-android-bridge"
+    check test -f "$DATA_DIR/config/bridge.conf"
+    if [[ -f "$DATA_DIR/config/bridge.conf" ]]; then
+      check "@HOME@/.local/bin/klipper-android-bridge" --check-config "$DATA_DIR/config/bridge.conf"
+    fi
+    check test -x "@HOME@/klippy-env/bin/python"
+    check test -f "$DATA_DIR/config/printer.cfg"
+    check test -d "$PREFIX/var/service"
+    exit "$failures"
+    ;;
+  logs)
+    service="${2:-klipper}"
+    exec tail -n 100 -F "$DATA_DIR/logs/${service}.log"
+    ;;
+  restart)
+    shift
+    exec sv restart "${@:-klipper-android-bridge klipper moonraker klipper-web}"
+    ;;
+  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|restart [services...]}" >&2; exit 2 ;;
+esac

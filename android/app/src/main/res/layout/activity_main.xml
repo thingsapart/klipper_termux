@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/drawer_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:background="#11151B"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
+
+        <ImageButton
+            android:id="@+id/nav_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/open_navigation"
+            android:padding="13dp"
+            android:src="@drawable/ic_menu"
+            android:tint="@color/mainsail_text_secondary" />
+
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_launcher" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="9dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/app_name"
+                android:textColor="@color/mainsail_text_primary"
+                android:textSize="18sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_subtitle"
+                android:textColor="@color/mainsail_text_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageButton
+            android:id="@+id/primary_toggle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/open_mainsail"
+            android:padding="13dp"
+            android:src="@drawable/ic_web"
+            android:tint="@color/mainsail_primary" />
+
+        <ImageButton
+            android:id="@+id/overflow_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/more_options"
+            android:padding="13dp"
+            android:src="@drawable/ic_more"
+            android:tint="@color/mainsail_text_secondary" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/web_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:max="100"
+        android:progressTint="@color/mainsail_primary"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ScrollView
+            android:id="@+id/dashboard_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="28dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_panel_header"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="13dp"
+                        android:paddingTop="9dp"
+                        android:paddingEnd="13dp"
+                        android:paddingBottom="9dp">
+
+                        <TextView
+                            style="@style/MainsailCardTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/system_status" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/live"
+                            android:textColor="@color/mainsail_text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_panel_body"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal"
+                        android:paddingStart="5dp"
+                        android:paddingTop="7dp"
+                        android:paddingEnd="5dp"
+                        android:paddingBottom="8dp">
+
+                        <LinearLayout
+                            android:id="@+id/status_bridge_switch"
+                            android:layout_width="0dp"
+                            android:layout_height="72dp"
+                            android:layout_margin="3dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/pb86_switch_off"
+                            android:clickable="true"
+                            android:contentDescription="@string/toggle_bridge_description"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:orientation="vertical">
+                            <TextView android:id="@+id/summary_bridge_dot" style="@style/StatusDot" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/status_bridge" style="@style/StatusName" />
+                            <TextView android:id="@+id/summary_bridge_state" style="@style/StatusValue" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/status_termux_switch"
+                            android:layout_width="0dp"
+                            android:layout_height="72dp"
+                            android:layout_margin="3dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/pb86_switch_off"
+                            android:clickable="true"
+                            android:contentDescription="@string/toggle_termux_description"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:orientation="vertical">
+                            <TextView android:id="@+id/summary_termux_dot" style="@style/StatusDot" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/status_termux" style="@style/StatusName" />
+                            <TextView android:id="@+id/summary_termux_state" style="@style/StatusValue" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/status_usb_switch"
+                            android:layout_width="0dp"
+                            android:layout_height="72dp"
+                            android:layout_margin="3dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/pb86_switch_off"
+                            android:clickable="true"
+                            android:contentDescription="@string/usb_status_description"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:orientation="vertical">
+                            <TextView android:id="@+id/summary_usb_dot" style="@style/StatusDot" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/status_usb" style="@style/StatusName" />
+                            <TextView android:id="@+id/summary_usb_state" style="@style/StatusValue" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/status_data_switch"
+                            android:layout_width="0dp"
+                            android:layout_height="72dp"
+                            android:layout_margin="3dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/pb86_switch_off"
+                            android:clickable="true"
+                            android:contentDescription="@string/data_status_description"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:orientation="vertical">
+                            <TextView android:id="@+id/summary_data_dot" style="@style/StatusDot" />
+                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/status_data" style="@style/StatusName" />
+                            <TextView android:id="@+id/summary_data_state" style="@style/StatusValue" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="11dp"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_panel_header"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:padding="13dp">
+
+                        <TextView
+                            style="@style/MainsailCardTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/usb_bridge" />
+
+                        <TextView
+                            android:id="@+id/service_badge"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="@drawable/bg_status_chip_off"
+                            android:fontFamily="sans-serif-medium"
+                            android:text="@string/status_stopped"
+                            android:textColor="@color/mainsail_text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_panel_body"
+                        android:orientation="vertical"
+                        android:padding="14dp">
+
+                        <TextView
+                            android:id="@+id/service_status"
+                            style="@style/MainsailBodyText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="11dp"
+                            android:orientation="horizontal">
+                            <Button android:id="@+id/start_service" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/start_bridge" />
+                            <Button android:id="@+id/stop_service" style="@style/MainsailButtonSecondary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/stop" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="11dp"
+                    android:orientation="vertical">
+                    <TextView style="@style/PanelHeaderStandalone" android:text="@string/klipper_stack" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/stack_description" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="11dp" android:orientation="horizontal">
+                            <Button android:id="@+id/start_termux" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/start_everything" />
+                            <Button android:id="@+id/stop_termux" style="@style/MainsailButtonDanger" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/stop_stack" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/MainsailSectionTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="22dp"
+                    android:text="@string/usb_devices" />
+
+                <LinearLayout
+                    android:id="@+id/device_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="7dp"
+                    android:orientation="vertical" />
+            </LinearLayout>
+        </ScrollView>
+
+        <FrameLayout
+            android:id="@+id/mainsail_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#080A0E"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/mainsail_container"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <LinearLayout
+                android:id="@+id/mainsail_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_margin="24dp"
+                android:background="@drawable/bg_panel_body"
+                android:orientation="vertical"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/MainsailCardTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/mainsail_unavailable" />
+
+                <TextView
+                    android:id="@+id/mainsail_error_message"
+                    style="@style/MainsailBodyText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/mainsail_unavailable_description" />
+
+                <Button
+                    android:id="@+id/retry_mainsail"
+                    style="@style/MainsailButtonPrimary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/retry" />
+
+                <Button
+                    android:id="@+id/start_stack_from_web"
+                    style="@style/MainsailButtonSecondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/start_everything" />
+
+                <Button
+                    android:id="@+id/web_open_setup"
+                    style="@style/MainsailButtonSecondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/open_setup" />
+
+                <Button
+                    android:id="@+id/web_open_external"
+                    style="@style/MainsailButtonSecondary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/open_in_browser" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <ScrollView
+            android:id="@+id/setup_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="12dp" android:paddingTop="12dp" android:paddingEnd="12dp" android:paddingBottom="28dp">
+                <TextView style="@style/MainsailSectionTitle" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/setup_klipper" />
+                <TextView android:id="@+id/wizard_progress" style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:layout_marginBottom="10dp" android:text="@string/setup_progress_initial" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <LinearLayout android:id="@+id/wizard_termux_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_termux" /><TextView android:id="@+id/wizard_termux_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_termux_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/get_termux_description" />
+                        <Button android:id="@+id/wizard_open_termux_download" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/open_termux_download" />
+                        <Button android:id="@+id/wizard_open_termux_github" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/open_termux_github_releases" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_permission_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_permission" /><TextView android:id="@+id/wizard_permission_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_permission_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/permission_step_description" />
+                        <Button android:id="@+id/wizard_grant_permission" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/grant_termux_permission" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_install_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_install_stack" /><TextView android:id="@+id/wizard_install_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_install_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/installer_description" />
+                        <TextView android:id="@+id/installer_command" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:fontFamily="monospace" android:padding="12dp" android:textColor="@color/mainsail_primary" android:textIsSelectable="true" android:textSize="12sp" />
+                        <TextView android:id="@+id/installer_note" style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="@string/installer_permission_note" android:textSize="12sp" />
+                        <Button android:id="@+id/install_termux" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="11dp" android:text="@string/install_in_termux" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_bridge_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_bridge" /><TextView android:id="@+id/wizard_bridge_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_bridge_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/pairing_explanation" />
+                        <TextView android:id="@+id/pairing_command" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:fontFamily="monospace" android:padding="12dp" android:textColor="@color/mainsail_primary" android:textIsSelectable="true" android:textSize="12sp" />
+                        <Button android:id="@+id/wizard_send_pairing" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/send_pairing_to_termux" />
+                        <Button android:id="@+id/wizard_usb_action" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/start_bridge" />
+                        <Button android:id="@+id/regenerate_token" style="@style/MainsailButtonSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="@string/regenerate_token" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_verify_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_verify" /><TextView android:id="@+id/wizard_verify_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_verify_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/verify_step_description" />
+                        <Button android:id="@+id/wizard_start_stack" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/start_everything" />
+                        <Button android:id="@+id/wizard_open_mainsail" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/open_mainsail" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+
+        <ScrollView android:id="@+id/settings_page" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:fillViewport="true" android:visibility="gone">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="12dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                    <TextView style="@style/PanelHeaderStandalone" android:text="@string/install_and_setup" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/install_and_setup_description" />
+                        <Button android:id="@+id/open_setup_wizard" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/install_and_setup" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout style="@style/WizardStep">
+                    <TextView style="@style/PanelHeaderStandalone" android:text="@string/mainsail_address" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/mainsail_address_description" />
+                        <EditText android:id="@+id/mainsail_url" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:hint="@string/mainsail_url_hint" android:importantForAutofill="no" android:inputType="textUri" android:padding="12dp" android:singleLine="true" android:textColor="@color/mainsail_text_primary" android:textColorHint="@color/mainsail_text_muted" />
+                        <Button android:id="@+id/save_mainsail_url" style="@style/MainsailButtonPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:layout_marginTop="8dp" android:text="@string/save" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout style="@style/WizardStep">
+                    <TextView style="@style/PanelHeaderStandalone" android:text="@string/download_sources" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
+                        <EditText android:id="@+id/termux_download_url" android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_code" android:hint="@string/termux_download_url_hint" android:importantForAutofill="no" android:inputType="textUri" android:padding="12dp" android:singleLine="true" android:textColor="@color/mainsail_text_primary" android:textColorHint="@color/mainsail_text_muted" />
+                        <Button android:id="@+id/open_termux_download" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/open_termux_download" />
+                        <EditText android:id="@+id/termux_github_releases_url" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_code" android:hint="@string/termux_github_releases_url_hint" android:importantForAutofill="no" android:inputType="textUri" android:padding="12dp" android:singleLine="true" android:textColor="@color/mainsail_text_primary" android:textColorHint="@color/mainsail_text_muted" />
+                        <Button android:id="@+id/open_termux_github_releases" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/open_termux_github_releases" />
+                        <Button android:id="@+id/save_termux_links" style="@style/MainsailButtonPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="@string/save_download_links" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="280dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="#11151B"
+        android:elevation="16dp"
+        android:orientation="vertical"
+        android:paddingTop="18dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="22dp">
+            <ImageView android:layout_width="42dp" android:layout_height="42dp" android:contentDescription="@string/app_name" android:src="@drawable/ic_launcher" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="12dp" android:layout_weight="1" android:orientation="vertical">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="sans-serif-medium" android:text="@string/app_name" android:textColor="@color/mainsail_text_primary" android:textSize="17sp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/app_subtitle" android:textColor="@color/mainsail_text_muted" android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView android:id="@+id/drawer_dashboard" style="@style/MainsailDrawerItem" android:drawableStart="@drawable/ic_dashboard" android:text="@string/dashboard" />
+        <TextView android:id="@+id/drawer_mainsail" style="@style/MainsailDrawerItem" android:drawableStart="@drawable/ic_web" android:text="@string/mainsail" />
+        <TextView android:id="@+id/drawer_settings" style="@style/MainsailDrawerItem" android:drawableStart="@drawable/ic_settings" android:text="@string/settings" />
+    </LinearLayout>
+</androidx.drawerlayout.widget.DrawerLayout>
