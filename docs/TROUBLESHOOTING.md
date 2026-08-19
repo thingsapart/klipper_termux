@@ -31,6 +31,12 @@ and restart the stack.
 Mainsail nginx proxy. If either fails, inspect `kabctl logs moonraker` and
 `~/printer_data/logs/nginx-error.log`.
 
+Moonraker does not need a working Klipper connection to serve its API or file
+manager. A missing MCU should show as a Klipper connection error in Mainsail,
+not make port 7125 unavailable. If the Moonraker service is repeatedly
+restarting, `kabctl logs moonraker` includes both Moonraker's own log and the
+runit process log so startup/import errors are visible.
+
 ## Klipper cannot open the PTY
 
 - Confirm the Android service is running.

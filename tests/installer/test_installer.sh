@@ -32,6 +32,14 @@ if grep -q '@SERVICES@\|@PREFIX@' <<<"$rendered_runner"; then
   exit 1
 fi
 
+rendered_moonraker_service="$(sed \
+  -e 's|@HOME@|/data/data/com.termux/files/home|g' \
+  -e 's|@DATA_DIR@|/data/data/com.termux/files/home/printer_data|g' \
+  "$ROOT/installer/services/moonraker.run")"
+sh -n - <<<"$rendered_moonraker_service"
+grep -q 'PYTHONPATH="/data/data/com.termux/files/home/moonraker"' \
+  <<<"$rendered_moonraker_service"
+
 rendered_kabctl="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/data/data/com.termux/files/usr|g' \
@@ -62,6 +70,8 @@ if grep -q 'Installing native Moonraker' <<<"$output"; then
   echo "--klipper-only unexpectedly installed Moonraker" >&2
   exit 1
 fi
+grep -q '^provider: none$' "$ROOT/installer/config/moonraker.conf"
+grep -q '^enable_config_write_access: True$' "$ROOT/installer/config/moonraker.conf"
 
 reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-reinstall-test.XXXXXX")"
 trap 'rm -rf "$reinstall_home"' EXIT

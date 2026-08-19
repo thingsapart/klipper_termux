@@ -29,7 +29,11 @@ check() {
 }
 
 service_is_up() {
-  SVDIR="$PREFIX/var/service" sv status "$1" 2>/dev/null | grep -q '^run:'
+  local status
+  status=$(SVDIR="$PREFIX/var/service" sv status "$1" 2>&1) || true
+  if grep -q '^run:' <<<"$status"; then return 0; fi
+  printf '%s' "$status"
+  return 1
 }
 
 case "${1:-status}" in
@@ -73,7 +77,13 @@ case "${1:-status}" in
     ;;
   logs)
     service="${2:-klipper}"
-    exec tail -n 100 -F "$DATA_DIR/logs/${service}.log"
+    log_files=()
+    [[ -f "$DATA_DIR/logs/${service}.log" ]] && log_files+=("$DATA_DIR/logs/${service}.log")
+    [[ -f "$DATA_DIR/logs/$service/current" ]] && log_files+=("$DATA_DIR/logs/$service/current")
+    if ((${#log_files[@]} == 0)); then
+      log_files+=("$DATA_DIR/logs/$service/current")
+    fi
+    exec tail -n 100 -F "${log_files[@]}"
     ;;
   restart)
     shift
