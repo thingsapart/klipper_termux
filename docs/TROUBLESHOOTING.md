@@ -69,6 +69,18 @@ UPDATE to install Moonraker's Android compatibility launcher.
 - Check guest-Wi-Fi isolation and Android/vendor firewall rules.
 - The installer does not open router ports; keep SSH limited to trusted LANs.
 
+## A connected printer board does not appear in the app
+
+- Klipper's default USB identity (`1d50:614e`) is treated as CDC/ACM even when
+  an older firmware descriptor is rejected by Android's strict automatic probe.
+- If Android enumerates another USB identity, the dashboard shows its VID:PID
+  and interface classes. Tap **Select serial driver** and try **CDC / ACM** for
+  native-USB Klipper boards. USB-to-UART boards commonly use CH341 or CP210x.
+- If the dashboard says Android sees no attached USB device, check host-mode,
+  cable, hub, and board power; driver selection cannot fix failed enumeration.
+- After granting access or selecting a driver, run **Configure Termux bridge**
+  again so `bridge.conf` receives that device's stable bridge UUID.
+
 ## MCU disconnects with the screen off
 
 Disable battery optimization for Termux and the companion app. Some vendors impose additional background restrictions even on foreground services. Keep the phone powered and test the exact model before unattended printing.

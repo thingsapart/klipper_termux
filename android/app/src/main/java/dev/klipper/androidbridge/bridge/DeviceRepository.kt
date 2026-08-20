@@ -91,6 +91,18 @@ class DeviceRepository(context: Context) {
         preferences.edit().putBoolean("ssh_setup_handled", true).apply()
     }
 
+    fun driverOverride(device: UsbDevice): UsbSerialDriverKind? =
+        preferences.getString("usb_driver.${usbId(device)}", null)?.let {
+            runCatching { UsbSerialDriverKind.valueOf(it) }.getOrNull()
+        }
+
+    fun setDriverOverride(device: UsbDevice, kind: UsbSerialDriverKind?) {
+        preferences.edit().apply {
+            val key = "usb_driver.${usbId(device)}"
+            if (kind == null) remove(key) else putString(key, kind.name)
+        }.apply()
+    }
+
     fun profileFor(device: UsbDevice, portNumber: Int, create: Boolean): DeviceProfile? {
         val key = stableKey(device, portNumber)
         val encoded = preferences.getString("device.$key", null)
@@ -124,6 +136,10 @@ class DeviceRepository(context: Context) {
             device.vendorId, device.productId, identity.replace('|', '_'), portNumber,
         )
     }
+
+    private fun usbId(device: UsbDevice): String = "%04x:%04x".format(
+        device.vendorId, device.productId,
+    )
 }
 
 fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

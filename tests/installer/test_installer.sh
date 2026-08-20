@@ -156,6 +156,12 @@ grep -q '^\[zeroconf\]$' "$ROOT/installer/config/moonraker.conf"
 grep -q '^mdns_hostname: klipper-android$' "$ROOT/installer/config/moonraker.conf"
 grep -Fq 'proxy_set_header Host $http_host;' "$ROOT/installer/config/nginx.conf"
 
+stdin_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-stdin-test.XXXXXX")"
+PREFIX=/not/termux HOME="$stdin_home" \
+  bash -s -- --dry-run --source-dir "$ROOT" --klipper-only \
+  <"$ROOT/installer/install.sh" >/dev/null
+rm -rf "$stdin_home"
+
 reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-reinstall-test.XXXXXX")"
 trap 'rm -rf "$reinstall_home"' EXIT
 mkdir -p "$reinstall_home/printer_data/config"

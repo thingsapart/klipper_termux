@@ -16,7 +16,6 @@ import android.net.wifi.WifiManager
 import dev.klipper.androidbridge.MainActivity
 import dev.klipper.androidbridge.R
 import com.hoho.android.usbserial.driver.UsbSerialPort
-import com.hoho.android.usbserial.driver.UsbSerialProber
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetAddress
@@ -179,7 +178,7 @@ class UsbBridgeService : Service() {
     }
 
     private fun findPort(id: UUID): Pair<DeviceProfile, UsbSerialPort>? {
-        for (driver in UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)) {
+        for (driver in UsbSerialDiscovery.findAllDrivers(usbManager, repository)) {
             for (port in driver.ports) {
                 val profile = repository.profileFor(driver.device, port.portNumber, false) ?: continue
                 if (profile.id == id) return profile to port

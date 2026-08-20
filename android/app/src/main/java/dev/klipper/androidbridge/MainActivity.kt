@@ -40,13 +40,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.core.view.GravityCompat
-import com.hoho.android.usbserial.driver.UsbSerialProber
 import dev.klipper.androidbridge.bridge.BridgeState
 import dev.klipper.androidbridge.bridge.DeviceRepository
 import dev.klipper.androidbridge.bridge.ExternalWebAddress
 import dev.klipper.androidbridge.bridge.MainsailAddress
 import dev.klipper.androidbridge.bridge.NetworkAddress
 import dev.klipper.androidbridge.bridge.UsbBridgeService
+import dev.klipper.androidbridge.bridge.UsbSerialDiscovery
+import dev.klipper.androidbridge.bridge.UsbSerialDriverKind
 import dev.klipper.androidbridge.bridge.toHex
 import java.util.UUID
 
@@ -193,7 +194,7 @@ class MainActivity : Activity() {
         }
         statusUsbSwitch.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
+            val driver = UsbSerialDiscovery.findAllDrivers(usbManager, repository).firstOrNull()
             when {
                 driver == null -> Toast.makeText(this, "No USB serial device attached", Toast.LENGTH_SHORT).show()
                 !usbManager.hasPermission(driver.device) -> requestUsbPermission(driver.device)
@@ -440,7 +441,7 @@ class MainActivity : Activity() {
     }
 
     private fun sendPairingToTermux() {
-        val configuredDevice = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val configuredDevice = UsbSerialDiscovery.findAllDrivers(usbManager, repository)
             .firstNotNullOfOrNull { driver ->
                 if (!usbManager.hasPermission(driver.device)) return@firstNotNullOfOrNull null
                 driver.ports.firstNotNullOfOrNull { port ->
@@ -499,7 +500,7 @@ class MainActivity : Activity() {
     }
 
     private fun prepareUsbBridge() {
-        val driver = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager).firstOrNull()
+        val driver = UsbSerialDiscovery.findAllDrivers(usbManager, repository).firstOrNull()
         when {
             driver == null -> Toast.makeText(
                 this,
@@ -519,7 +520,7 @@ class MainActivity : Activity() {
 
     private fun renderWizard() {
         if (!::wizardHeaders.isInitialized) return
-        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val drivers = UsbSerialDiscovery.findAllDrivers(usbManager, repository)
         val bridgeConnected = BridgeState.snapshots().isNotEmpty()
         val usbReady = drivers.any { usbManager.hasPermission(it.device) }
         val mainsailReady = repository.mainsailSeen()
@@ -844,7 +845,12 @@ class MainActivity : Activity() {
 
     private fun render() {
         val snapshots = BridgeState.snapshots().associateBy { it.deviceId }
-        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val drivers = UsbSerialDiscovery.findAllDrivers(usbManager, repository)
+        val supportedDeviceIds = drivers.mapTo(mutableSetOf()) { it.device.deviceId }
+        val unsupportedDevices = usbManager.deviceList.values
+            .filter { it.deviceId !in supportedDeviceIds }
+            .sortedBy { it.deviceId }
+        val rawUsbCount = usbManager.deviceList.size
         renderWizard()
         val now = System.currentTimeMillis()
         if (now >= nextLanAddressRefresh) {
@@ -892,6 +898,7 @@ class MainActivity : Activity() {
         val usbPermission = drivers.any { usbManager.hasPermission(it.device) }
         statusUsbSwitch.setBackgroundResource(
             when {
+                usbPorts == 0 && rawUsbCount > 0 -> R.drawable.pb86_switch_amber
                 usbPorts == 0 -> R.drawable.pb86_switch_off
                 usbPermission -> R.drawable.pb86_switch_green
                 else -> R.drawable.pb86_switch_amber
@@ -901,11 +908,13 @@ class MainActivity : Activity() {
             summaryUsbDot,
             summaryUsbState,
             when {
+                usbPorts == 0 && rawUsbCount > 0 -> "Select driver"
                 usbPorts == 0 -> "Detached"
                 usbPermission -> "$usbPorts ready"
                 else -> "Permission"
             },
             when {
+                usbPorts == 0 && rawUsbCount > 0 -> R.color.mainsail_warning
                 usbPorts == 0 -> R.color.mainsail_text_muted
                 usbPermission -> R.color.mainsail_success
                 else -> R.color.mainsail_warning
@@ -943,8 +952,30 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(18), dp(16), dp(18))
                 setBackgroundResource(R.drawable.bg_card)
-                addView(textView("No supported USB serial device attached.", color = R.color.mainsail_text_secondary))
-                addView(textView("Connect a printer through USB OTG or a powered hub.", 13f, R.color.mainsail_text_muted))
+                if (unsupportedDevices.isEmpty()) {
+                    addView(textView("Android sees no attached USB device.", color = R.color.mainsail_text_secondary))
+                    addView(textView("Connect a printer through USB OTG or a powered hub.", 13f, R.color.mainsail_text_muted))
+                } else {
+                    addView(textView("USB device found — select its serial driver.", color = R.color.mainsail_warning))
+                    unsupportedDevices.forEach { device ->
+                        val interfaces = (0 until device.interfaceCount).joinToString { index ->
+                            val usbInterface = device.getInterface(index)
+                            "${usbInterface.interfaceClass}/${usbInterface.interfaceSubclass}"
+                        }
+                        addView(textView(
+                            "VID:PID %04x:%04x · interfaces %s".format(
+                                device.vendorId, device.productId,
+                                interfaces.ifEmpty { "none" },
+                            ),
+                            13f,
+                            R.color.mainsail_text_secondary,
+                        ))
+                        addView(Button(this@MainActivity, null, 0, R.style.MainsailButtonPrimary).apply {
+                            text = "Select serial driver"
+                            setOnClickListener { showSerialDriverPicker(device) }
+                        })
+                    }
+                }
             }
             devices.addView(empty)
             return
@@ -1015,6 +1046,13 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                 ).apply { gravity = Gravity.END; topMargin = dp(8) })
             }
+            content.addView(Button(this, null, 0, R.style.MainsailButtonSecondary).apply {
+                text = "Serial driver"
+                setOnClickListener { showSerialDriverPicker(driver.device) }
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { gravity = Gravity.END; topMargin = dp(8) })
             if (snapshot != null) {
                 val active = System.currentTimeMillis() - snapshot.lastActivityMillis < 1500
                 val now = System.currentTimeMillis()
@@ -1062,6 +1100,29 @@ class MainActivity : Activity() {
         val intent = Intent("$packageName.USB_PERMISSION").setPackage(packageName)
         val pending = PendingIntent.getBroadcast(this, device.deviceId, intent, UsbBridgeService.pendingIntentFlags())
         usbManager.requestPermission(device, pending)
+    }
+
+    private fun showSerialDriverPicker(device: android.hardware.usb.UsbDevice) {
+        val kinds = UsbSerialDriverKind.entries
+        val labels = arrayOf("Automatic") + kinds.map { it.displayName }
+        AlertDialog.Builder(this)
+            .setTitle("USB serial driver")
+            .setItems(labels) { _, which ->
+                val kind = if (which == 0) null else kinds[which - 1]
+                repository.setDriverOverride(device, kind)
+                val driver = UsbSerialDiscovery.findAllDrivers(usbManager, repository)
+                    .firstOrNull { it.device.deviceId == device.deviceId }
+                if (driver == null) {
+                    Toast.makeText(this, "Automatic detection found no serial driver", Toast.LENGTH_LONG).show()
+                } else if (!usbManager.hasPermission(device)) {
+                    requestUsbPermission(device)
+                } else {
+                    Toast.makeText(this, "Using ${kind?.displayName ?: driver.javaClass.simpleName}", Toast.LENGTH_SHORT).show()
+                }
+                render()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun renameProfile(profile: dev.klipper.androidbridge.bridge.DeviceProfile) {

@@ -125,7 +125,11 @@ if (( ! DRY_RUN )); then
   [[ "$SDK" =~ ^[0-9]+$ ]] && (( SDK >= 24 )) || die "Android 7/API 24 or newer is required"
 fi
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+SCRIPT_DIR=""
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+if [[ -n "$SCRIPT_PATH" ]]; then
+  SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_PATH")" 2>/dev/null && pwd || true)"
+fi
 if [[ -z "$SOURCE_DIR" && -f "$SCRIPT_DIR/../CMakeLists.txt" ]]; then
   SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
