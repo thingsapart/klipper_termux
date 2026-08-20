@@ -36,13 +36,36 @@ _bridge_serial_dir = os.path.abspath("@PREFIX@/var/run/klipper-android")
 
 
 class _AndroidBridgeSerial(_original_serial):
-    def open(self):
+    def _is_bridge_port(self):
         port = self.port
         if isinstance(port, (str, bytes, os.PathLike)):
             port_path = os.path.abspath(os.fsdecode(port))
-            if os.path.dirname(port_path) == _bridge_serial_dir:
-                self._exclusive = None
+            return os.path.dirname(port_path) == _bridge_serial_dir
+        return False
+
+    def open(self):
+        if self._is_bridge_port():
+            self._exclusive = None
         return super().open()
+
+    def _set_special_baudrate(self, baudrate):
+        # The real baud is configured on Android from bridge.conf. A PTY has no
+        # wire rate, and Android does not implement Linux's custom-baud ioctl.
+        if self._is_bridge_port():
+            return None
+        return super()._set_special_baudrate(baudrate)
+
+    def _update_dtr_state(self):
+        # PTYs have no modem-control lines. Android applies the configured DTR
+        # flag directly to the USB serial driver when opening the remote port.
+        if self._is_bridge_port():
+            return None
+        return super()._update_dtr_state()
+
+    def _update_rts_state(self):
+        if self._is_bridge_port():
+            return None
+        return super()._update_rts_state()
 
 
 serial.Serial = _AndroidBridgeSerial

@@ -91,7 +91,16 @@ class Serial:
             assert self._exclusive is None
         else:
             assert self._exclusive is True
+        self._set_special_baudrate(250000)
+        self._update_dtr_state()
+        self._update_rts_state()
         return None
+    def _set_special_baudrate(self, baudrate):
+        self.configured_baudrate = baudrate
+    def _update_dtr_state(self):
+        self.configured_dtr = True
+    def _update_rts_state(self):
+        self.configured_rts = True
 PY
 cat >"$wrapper_home/klipper/klippy/chelper/__init__.py" <<'PY'
 import os
@@ -109,8 +118,13 @@ os.chmod("/dev/pts/123", 0o660)
 bridge = serial.Serial(exclusive=True)
 bridge.port = os.path.join(os.environ["WRAPPER_PREFIX"], "var/run/klipper-android/main")
 bridge.open()
+assert not hasattr(bridge, "configured_baudrate")
+assert not hasattr(bridge, "configured_dtr")
+assert not hasattr(bridge, "configured_rts")
 real = serial.Serial(port="/dev/ttyUSB0", exclusive=True)
 real.open()
+assert real.configured_baudrate == 250000
+assert real.configured_dtr and real.configured_rts
 print("android PTY chmod ignored")
 PY
 WRAPPER_PREFIX="$wrapper_home/usr" PYTHONPATH="$wrapper_home/python-hooks" \

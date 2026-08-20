@@ -63,6 +63,9 @@ UPDATE to install Moonraker's Android compatibility launcher.
   `$PREFIX/var/run/klipper-android`. Android denies advisory `flock()` on the
   bridge PTY. The launcher disables that optional lock only for managed bridge
   paths; physical serial devices keep Klipper's normal exclusive-open behavior.
+- The same launcher ignores custom-baud and DTR/RTS ioctls on the local bridge
+  PTY. A PTY has no physical baud rate or modem lines; `bridge.conf` carries
+  those settings to the Android USB driver, where they are actually applied.
 
 ## SSH setup or connection fails
 
