@@ -593,6 +593,7 @@ FIRMWARE_LIB="$TERMUX_HOME/.local/lib/k4a/firmware"
 render_template "$SOURCE_DIR/installer/firmware/firmware-manager.sh" \
   "$FIRMWARE_LIB/firmware-manager.sh" 1
 run install -m 0644 "$SOURCE_DIR/installer/firmware/profiles.tsv" "$FIRMWARE_LIB/profiles.tsv"
+run install -m 0644 "$SOURCE_DIR/installer/firmware/extract_toolchain.py" "$FIRMWARE_LIB/extract_toolchain.py"
 for firmware_config in "$SOURCE_DIR"/installer/firmware/configs/*.config; do
   run install -m 0644 "$firmware_config" "$FIRMWARE_LIB/configs/$(basename "$firmware_config")"
 done

@@ -100,7 +100,7 @@ install_toolchain() {
     toolchain_status
     return
   fi
-  local arch url checksum archive staging destination="$HOME_DIR/.local/opt/k4a-arm-toolchain"
+  local arch url checksum archive partial staging destination="$HOME_DIR/.local/opt/k4a-arm-toolchain"
   arch=$(uname -m)
   case "$arch" in
     aarch64|arm64)
@@ -111,12 +111,40 @@ install_toolchain() {
     *) die "no Android toolchain is configured for architecture $arch" ;;
   esac
   [[ -n "$url" && "$checksum" =~ ^[0-9a-fA-F]{64}$ ]] || die "this release has no checksum-pinned Bionic toolchain for $arch; install arm-none-eabi-gcc manually or configure K4A_ARM_TOOLCHAIN_*_URL and _SHA256"
-  archive=$(mktemp "$HOME_DIR/.cache/k4a-toolchain.XXXXXX.tar.xz")
+  mkdir -p "$HOME_DIR/.cache/k4a/toolchains"
+  archive="$HOME_DIR/.cache/k4a/toolchains/$checksum.tar.xz"
+  partial="$archive.part"
   staging=$(mktemp -d "$HOME_DIR/.cache/k4a-toolchain.XXXXXX")
-  trap 'rm -f -- "$archive"; rm -rf -- "$staging"' EXIT
-  curl -fL --retry 3 "$url" -o "$archive"
-  printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c -
-  tar -xJf "$archive" -C "$staging" --strip-components=1
+  trap 'rm -rf -- "$staging"' EXIT
+  if ! printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - >/dev/null 2>&1; then
+    rm -f -- "$archive"
+    # Adopt an archive left by the older temporary-download implementation when
+    # possible. A normally completed failed extraction removed that file, but an
+    # interrupted process may have left a fully verified copy behind.
+    local legacy
+    for legacy in "$HOME_DIR"/.cache/k4a-toolchain.*.tar.xz; do
+      [[ -f "$legacy" ]] || continue
+      if printf '%s  %s\n' "$checksum" "$legacy" | sha256sum -c - >/dev/null 2>&1; then
+        mv -- "$legacy" "$archive"
+        break
+      fi
+    done
+  fi
+  if ! printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - >/dev/null 2>&1; then
+    if [[ -s "$partial" ]]; then
+      curl -fL --retry 3 -C - "$url" -o "$partial"
+    else
+      curl -fL --retry 3 "$url" -o "$partial"
+    fi
+    printf '%s  %s\n' "$checksum" "$partial" | sha256sum -c - || {
+      rm -f -- "$partial"
+      die "downloaded toolchain checksum did not match"
+    }
+    mv -- "$partial" "$archive"
+  else
+    printf 'Using cached, verified toolchain archive.\n'
+  fi
+  python "$LIB_DIR/extract_toolchain.py" "$archive" "$staging"
   [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
   if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
     pkg install -y glibc-repo file

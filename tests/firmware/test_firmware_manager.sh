@@ -12,6 +12,7 @@ FAKE_BIN="$TMP/bin"
 mkdir -p "$LIB_DIR" "$FAKE_BIN" "$HOME_DIR/klipper" "$PREFIX/var/service" "$DATA_DIR/gcodes"
 cp -R "$ROOT/installer/firmware/configs" "$LIB_DIR/"
 cp "$ROOT/installer/firmware/profiles.tsv" "$LIB_DIR/"
+cp "$ROOT/installer/firmware/extract_toolchain.py" "$LIB_DIR/"
 touch "$HOME_DIR/klipper/Makefile"
 mkdir "$HOME_DIR/klipper/.git"
 
@@ -73,6 +74,18 @@ export K4A_KLIPPER_DIR="$HOME_DIR/klipper"
 export K4A_FIRMWARE_LIB="$LIB_DIR"
 MANAGER="$ROOT/installer/firmware/firmware-manager.sh"
 grep -q '87330bab085dd8749d4ed0ad633674b9dc48b237b61069e3b481abd364d0a684' "$MANAGER"
+
+mkdir -p "$TMP/archive/toolchain/bin" "$TMP/extracted"
+printf binary >"$TMP/archive/toolchain/bin/ld.bfd"
+ln "$TMP/archive/toolchain/bin/ld.bfd" "$TMP/archive/toolchain/bin/arm-none-eabi-ld"
+tar -cJf "$TMP/toolchain.tar.xz" -C "$TMP/archive" toolchain
+python3 "$LIB_DIR/extract_toolchain.py" "$TMP/toolchain.tar.xz" "$TMP/extracted"
+[[ $(<"$TMP/extracted/bin/ld.bfd") == binary ]]
+[[ $(<"$TMP/extracted/bin/arm-none-eabi-ld") == binary ]]
+[[ "$TMP/extracted/bin/ld.bfd" -ef "$TMP/extracted/bin/arm-none-eabi-ld" ]] && {
+  echo 'extractor recreated a hard link instead of copying its contents' >&2
+  exit 1
+}
 
 profiles=$(/bin/bash "$MANAGER" profiles)
 grep -q btt-octopus-f446-v1 <<<"$profiles"
