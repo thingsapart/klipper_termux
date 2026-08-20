@@ -943,6 +943,7 @@ class MainActivity : Activity() {
         status.text = buildString {
             append("Loopback listener  127.0.0.1:${repository.port()}")
             BridgeState.listenerError?.let { append("\nListener error: $it") }
+            BridgeState.lastUsbError?.let { append("\nLast USB error: $it") }
             append("\n${snapshots.size} active Termux connection(s)")
         }
         pairing.text = getString(R.string.pairing_value, repository.token().toHex(), repository.port())

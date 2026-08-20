@@ -56,7 +56,8 @@ object TermuxRunner {
         val command = "set -eu; mkdir -p '$HOME/printer_data/config'; " +
             "if [ ! -f '$config' ]; then cp '$example' '$config'; fi; " +
             "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/; " +
-            "s/^device=main,[^,]*/device=main,$device/' '$config'; " +
+            "s/^device=main,[^,]*/device=main,$device/; " +
+            "s|^(device=main,[^,]+,250000,8,1,none,)none,|\\1dtr+rts,|' '$config'; " +
             "if [ -x '$KABCTL' ]; then '$KABCTL' printer-starter; fi"
         return dispatch(context, SHELL, arrayOf("-lc", command))
     }

@@ -424,6 +424,20 @@ if (( INSTALL_MOONRAKER )); then
   render_template "$SOURCE_DIR/installer/moonraker-android.py" "$BIN_DIR/moonraker-android.py" 1
 fi
 render_template "$SOURCE_DIR/installer/config/bridge.conf.example" "$DATA_DIR/config/bridge.conf.example" 1
+BRIDGE_CONFIG="$DATA_DIR/config/bridge.conf"
+if [[ -f "$BRIDGE_CONFIG" ]] && grep -qE \
+    '^device=main,[^,]+,250000,8,1,none,none,' "$BRIDGE_CONFIG"; then
+  # Older generated configurations left CDC control lines deasserted. Linux's
+  # cdc_acm driver and Octo4Android both assert DTR+RTS when opening a port.
+  if (( DRY_RUN )); then
+    printf '+ migrate legacy bridge flags to dtr+rts in %s\n' "$BRIDGE_CONFIG"
+  else
+    prepare_update_mutation
+    sed -i -E \
+      's|^(device=main,[^,]+,250000,8,1,none,)none(,.*)$|\1dtr+rts\2|' \
+      "$BRIDGE_CONFIG"
+  fi
+fi
 render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
 PRINTER_CONFIG="$DATA_DIR/config/printer.cfg"
 if [[ ! -s "$PRINTER_CONFIG" ]] || grep -qE \

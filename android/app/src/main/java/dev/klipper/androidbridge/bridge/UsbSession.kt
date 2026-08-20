@@ -1,5 +1,6 @@
 package dev.klipper.androidbridge.bridge
 
+import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import java.io.Closeable
 import java.net.Socket
@@ -32,8 +33,8 @@ class UsbSession(
                 counters.usbReads.incrementAndGet()
                 counters.lastActivityMillis.set(System.currentTimeMillis())
             }
-        } catch (_: Exception) {
-            if (!closed.get()) counters.errors.incrementAndGet()
+        } catch (error: Exception) {
+            if (!closed.get()) recordError("USB read", error)
         } finally {
             close()
         }
@@ -52,8 +53,8 @@ class UsbSession(
                 counters.usbWrites.incrementAndGet()
                 counters.lastActivityMillis.set(System.currentTimeMillis())
             }
-        } catch (_: Exception) {
-            if (!closed.get()) counters.errors.incrementAndGet()
+        } catch (error: Exception) {
+            if (!closed.get()) recordError("USB write", error)
         } finally {
             close()
         }
@@ -66,9 +67,16 @@ class UsbSession(
         onClosed(this)
     }
 
+    private fun recordError(operation: String, error: Exception) {
+        counters.errors.incrementAndGet()
+        val detail = "$operation: ${error.message ?: error.javaClass.simpleName}"
+        BridgeState.lastUsbError = detail
+        Log.e(TAG, detail, error)
+    }
+
     companion object {
+        private const val TAG = "KlipperUsbSession"
         private const val BUFFER_SIZE = 16 * 1024
         private const val WRITE_TIMEOUT_MS = 1000
     }
 }
-

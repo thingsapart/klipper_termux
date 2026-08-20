@@ -165,12 +165,14 @@ class UsbBridgeService : Service() {
                 false
             } else {
                 BridgeState.sessions[profile.id] = counters
+                BridgeState.lastUsbError = null
                 updateWakeLock()
                 updateNotification()
                 session.start()
                 true
             }
         } catch (error: Exception) {
+            BridgeState.lastUsbError = "USB setup: ${error.message ?: error.javaClass.simpleName}"
             runCatching { port.close() }
             BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.USB_ERROR, error.message ?: "USB setup failed")
             false

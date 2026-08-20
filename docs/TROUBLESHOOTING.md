@@ -66,6 +66,11 @@ UPDATE to install Moonraker's Android compatibility launcher.
 - The same launcher ignores custom-baud and DTR/RTS ioctls on the local bridge
   PTY. A PTY has no physical baud rate or modem lines; `bridge.conf` carries
   those settings to the Android USB driver, where they are actually applied.
+- If Klipper opens the PTY but repeatedly times out waiting for
+  `identify_response`, confirm the `device=main` line in `bridge.conf` uses
+  `dtr+rts` in its flags field. UPDATE migrates the old generated `none` value.
+  Linux CDC-ACM also asserts DTR and RTS when opening a port; some MCU firmware
+  will accept writes but not return data while those control lines are low.
 
 ## SSH setup or connection fails
 

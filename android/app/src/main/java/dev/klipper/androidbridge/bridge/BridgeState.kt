@@ -34,7 +34,7 @@ class SessionCounters(val deviceId: UUID, val alias: String) {
 object BridgeState {
     @Volatile var serviceRunning = false
     @Volatile var listenerError: String? = null
+    @Volatile var lastUsbError: String? = null
     val sessions = ConcurrentHashMap<UUID, SessionCounters>()
     fun snapshots(): List<SessionSnapshot> = sessions.values.map(SessionCounters::snapshot)
 }
-
