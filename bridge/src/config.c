@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "kab_config.h"
+#include "k4a_config.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -26,7 +26,7 @@ static int hex_value(char character) {
     return -1;
 }
 
-int kab_parse_hex(const char *text, uint8_t *output, size_t output_size) {
+int k4a_parse_hex(const char *text, uint8_t *output, size_t output_size) {
     size_t output_index = 0;
     int high = -1;
     for (; *text; text++) {
@@ -44,10 +44,10 @@ int kab_parse_hex(const char *text, uint8_t *output, size_t output_size) {
     return high < 0 && output_index == output_size ? 0 : -1;
 }
 
-void kab_config_defaults(struct kab_config *config) {
+void k4a_config_defaults(struct k4a_config *config) {
     memset(config, 0, sizeof(*config));
     snprintf(config->host, sizeof(config->host), "127.0.0.1");
-    config->port = KAB_DEFAULT_PORT;
+    config->port = K4A_DEFAULT_PORT;
     config->log_interval_seconds = 60;
 }
 
@@ -62,11 +62,11 @@ static int parse_unsigned(const char *text, unsigned long maximum,
 }
 
 static int parse_parity(const char *text, uint8_t *parity) {
-    if (!strcmp(text, "none")) *parity = KAB_PARITY_NONE;
-    else if (!strcmp(text, "odd")) *parity = KAB_PARITY_ODD;
-    else if (!strcmp(text, "even")) *parity = KAB_PARITY_EVEN;
-    else if (!strcmp(text, "mark")) *parity = KAB_PARITY_MARK;
-    else if (!strcmp(text, "space")) *parity = KAB_PARITY_SPACE;
+    if (!strcmp(text, "none")) *parity = K4A_PARITY_NONE;
+    else if (!strcmp(text, "odd")) *parity = K4A_PARITY_ODD;
+    else if (!strcmp(text, "even")) *parity = K4A_PARITY_EVEN;
+    else if (!strcmp(text, "mark")) *parity = K4A_PARITY_MARK;
+    else if (!strcmp(text, "space")) *parity = K4A_PARITY_SPACE;
     else return -1;
     return 0;
 }
@@ -80,16 +80,16 @@ static int parse_flags(const char *text, uint8_t *flags) {
     char *save = NULL;
     for (char *part = strtok_r(copy, "+", &save); part;
          part = strtok_r(NULL, "+", &save)) {
-        if (!strcmp(part, "dtr")) *flags |= KAB_FLAG_DTR;
-        else if (!strcmp(part, "rts")) *flags |= KAB_FLAG_RTS;
+        if (!strcmp(part, "dtr")) *flags |= K4A_FLAG_DTR;
+        else if (!strcmp(part, "rts")) *flags |= K4A_FLAG_RTS;
         else return -1;
     }
     return 0;
 }
 
-static int parse_device(char *value, struct kab_config *config,
+static int parse_device(char *value, struct k4a_config *config,
                         char *error, size_t error_size, unsigned line_number) {
-    if (config->device_count >= KAB_MAX_DEVICES) {
+    if (config->device_count >= K4A_MAX_DEVICES) {
         snprintf(error, error_size, "line %u: too many devices", line_number);
         return -1;
     }
@@ -106,7 +106,7 @@ static int parse_device(char *value, struct kab_config *config,
                  line_number);
         return -1;
     }
-    struct kab_device_config *device = &config->devices[config->device_count];
+    struct k4a_device_config *device = &config->devices[config->device_count];
     if (!*fields[0] || strlen(fields[0]) >= sizeof(device->alias) ||
         strlen(fields[7]) >= sizeof(device->pty_link)) {
         snprintf(error, error_size, "line %u: alias or PTY path is invalid", line_number);
@@ -127,7 +127,7 @@ static int parse_device(char *value, struct kab_config *config,
         /* An all-zero UUID is the wire-level selector for the first available port. */
         memset(device->device_id, 0, sizeof(device->device_id));
         device->online = 1;
-    } else if (kab_parse_hex(fields[1], device->device_id, sizeof(device->device_id))) {
+    } else if (k4a_parse_hex(fields[1], device->device_id, sizeof(device->device_id))) {
         snprintf(error, error_size, "line %u: invalid device UUID", line_number);
         return -1;
     } else {
@@ -158,9 +158,9 @@ static int parse_device(char *value, struct kab_config *config,
     return 0;
 }
 
-int kab_config_load(const char *path, struct kab_config *config,
+int k4a_config_load(const char *path, struct k4a_config *config,
                     char *error, size_t error_size) {
-    kab_config_defaults(config);
+    k4a_config_defaults(config);
     FILE *file = fopen(path, "r");
     if (!file) {
         snprintf(error, error_size, "cannot open %s: %s", path, strerror(errno));
@@ -194,7 +194,7 @@ int kab_config_load(const char *path, struct kab_config *config,
             if (parse_unsigned(value, 65535, &number) || !number) goto invalid_value;
             config->port = (uint16_t)number;
         } else if (!strcmp(key, "token")) {
-            if (kab_parse_hex(value, config->token, sizeof(config->token))) goto invalid_value;
+            if (k4a_parse_hex(value, config->token, sizeof(config->token))) goto invalid_value;
             config->token_set = 1;
         } else if (!strcmp(key, "log_interval")) {
             if (parse_unsigned(value, 86400, &number)) goto invalid_value;

@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "kab_config.h"
+#include "k4a_config.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -9,12 +9,12 @@
 
 int main(void) {
     uint8_t bytes[4];
-    assert(kab_parse_hex("01-ab:CD ef", bytes, sizeof(bytes)) == 0);
+    assert(k4a_parse_hex("01-ab:CD ef", bytes, sizeof(bytes)) == 0);
     assert(bytes[0] == 0x01 && bytes[1] == 0xab &&
            bytes[2] == 0xcd && bytes[3] == 0xef);
-    assert(kab_parse_hex("abc", bytes, sizeof(bytes)) != 0);
+    assert(k4a_parse_hex("abc", bytes, sizeof(bytes)) != 0);
 
-    char path[] = "/tmp/kab-config-test-XXXXXX";
+    char path[] = "/tmp/k4a-config-test-XXXXXX";
     int descriptor = mkstemp(path);
     assert(descriptor >= 0);
     FILE *file = fdopen(descriptor, "w");
@@ -29,15 +29,15 @@ int main(void) {
           file);
     assert(fclose(file) == 0);
 
-    struct kab_config config;
+    struct k4a_config config;
     char error[256];
-    assert(kab_config_load(path, &config, error, sizeof(error)) == 0);
+    assert(k4a_config_load(path, &config, error, sizeof(error)) == 0);
     assert(config.port == 27831);
     assert(config.device_count == 3);
     assert(!strcmp(config.devices[0].alias, "main"));
     assert(config.devices[0].online);
     assert(config.devices[0].baud == 250000);
-    assert(config.devices[0].flags == (KAB_FLAG_DTR | KAB_FLAG_RTS));
+    assert(config.devices[0].flags == (K4A_FLAG_DTR | K4A_FLAG_RTS));
     assert(config.devices[0].device_id[0] == 0x00);
     assert(config.devices[0].device_id[15] == 0xff);
     assert(config.devices[1].online);

@@ -1,9 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE 600
 
-#include "kab_buffer.h"
-#include "kab_config.h"
-#include "kab_protocol.h"
+#include "k4a_buffer.h"
+#include "k4a_config.h"
+#include "k4a_protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -24,7 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#ifdef KAB_APPLE
+#ifdef K4A_APPLE
 #include <util.h>
 #endif
 
@@ -32,12 +32,12 @@
 #define MSG_NOSIGNAL 0
 #endif
 
-#define KAB_VERSION "0.1.0"
-#define KAB_CONNECT_TIMEOUT_SECONDS 2
-#define KAB_INITIAL_BACKOFF_MS 250u
-#define KAB_MAX_BACKOFF_MS 10000u
+#define K4A_VERSION "0.1.0"
+#define K4A_CONNECT_TIMEOUT_SECONDS 2
+#define K4A_INITIAL_BACKOFF_MS 250u
+#define K4A_MAX_BACKOFF_MS 10000u
 
-struct kab_stats {
+struct k4a_stats {
     uint64_t pty_rx_bytes;
     uint64_t pty_tx_bytes;
     uint64_t network_rx_bytes;
@@ -49,15 +49,15 @@ struct kab_stats {
     uint64_t errors;
 };
 
-struct kab_session {
-    const struct kab_device_config *config;
+struct k4a_session {
+    const struct k4a_device_config *config;
     int pty_fd;
     int socket_fd;
     int remote_eof;
-    char pty_slave[KAB_PATH_SIZE];
-    struct kab_buffer to_network;
-    struct kab_buffer to_pty;
-    struct kab_stats stats;
+    char pty_slave[K4A_PATH_SIZE];
+    struct k4a_buffer to_network;
+    struct k4a_buffer to_pty;
+    struct k4a_stats stats;
     uint64_t reconnect_at_ms;
     unsigned backoff_ms;
 };
@@ -127,11 +127,11 @@ static int read_all(int descriptor, void *data, size_t length) {
     return 0;
 }
 
-static int make_pty(struct kab_session *session) {
+static int make_pty(struct k4a_session *session) {
     int master = -1;
     int slave = -1;
-#ifdef KAB_APPLE
-    char name[KAB_PATH_SIZE];
+#ifdef K4A_APPLE
+    char name[K4A_PATH_SIZE];
     if (openpty(&master, &slave, name, NULL, NULL)) return -1;
     snprintf(session->pty_slave, sizeof(session->pty_slave), "%s", name);
 #else
@@ -163,13 +163,13 @@ static int make_pty(struct kab_session *session) {
     return 0;
 }
 
-static int publish_pty(const struct kab_session *session) {
+static int publish_pty(const struct k4a_session *session) {
     struct stat status;
     if (!lstat(session->config->pty_link, &status) && !S_ISLNK(status.st_mode)) {
         errno = EEXIST;
         return -1;
     }
-    char temporary[KAB_PATH_SIZE + 64];
+    char temporary[K4A_PATH_SIZE + 64];
     int count = snprintf(temporary, sizeof(temporary), "%s.tmp.%ld",
                          session->config->pty_link, (long)getpid());
     if (count < 0 || (size_t)count >= sizeof(temporary)) {
@@ -191,13 +191,13 @@ static int configure_socket(int descriptor) {
     int enabled = 1;
     setsockopt(descriptor, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
     setsockopt(descriptor, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled));
-    struct timeval timeout = {.tv_sec = KAB_CONNECT_TIMEOUT_SECONDS, .tv_usec = 0};
+    struct timeval timeout = {.tv_sec = K4A_CONNECT_TIMEOUT_SECONDS, .tv_usec = 0};
     setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     return 0;
 }
 
-static int connect_server(const struct kab_config *config) {
+static int connect_server(const struct k4a_config *config) {
     char port[8];
     snprintf(port, sizeof(port), "%u", config->port);
     struct addrinfo hints = {0};
@@ -224,48 +224,48 @@ static int connect_server(const struct kab_config *config) {
     return descriptor;
 }
 
-static int open_remote(const struct kab_config *global, struct kab_session *session,
+static int open_remote(const struct k4a_config *global, struct k4a_session *session,
                        char *message, size_t message_size) {
     int descriptor = connect_server(global);
     if (descriptor < 0) return -1;
-    struct kab_open_request request = {0};
-    memcpy(request.magic, KAB_MAGIC, sizeof(KAB_MAGIC));
-    request.version_be = kab_htobe16(KAB_PROTOCOL_VERSION);
-    request.operation_be = kab_htobe16(KAB_OP_OPEN);
-    request.request_id_be = kab_htobe32((uint32_t)monotonic_ms());
+    struct k4a_open_request request = {0};
+    memcpy(request.magic, K4A_MAGIC, sizeof(K4A_MAGIC));
+    request.version_be = k4a_htobe16(K4A_PROTOCOL_VERSION);
+    request.operation_be = k4a_htobe16(K4A_OP_OPEN);
+    request.request_id_be = k4a_htobe32((uint32_t)monotonic_ms());
     memcpy(request.token, global->token, sizeof(request.token));
     memcpy(request.device_id, session->config->device_id, sizeof(request.device_id));
-    request.baud_be = kab_htobe32(session->config->baud);
+    request.baud_be = k4a_htobe32(session->config->baud);
     request.data_bits = session->config->data_bits;
     request.stop_bits = session->config->stop_bits;
     request.parity = session->config->parity;
     request.flags = session->config->flags;
 
-    struct kab_response response;
+    struct k4a_response response;
     if (write_all(descriptor, &request, sizeof(request)) ||
         read_all(descriptor, &response, sizeof(response)) ||
-        !kab_has_magic(response.magic) ||
-        kab_be16toh(response.version_be) != KAB_PROTOCOL_VERSION) {
+        !k4a_has_magic(response.magic) ||
+        k4a_be16toh(response.version_be) != K4A_PROTOCOL_VERSION) {
         close(descriptor);
         errno = EPROTO;
         return -1;
     }
-    uint16_t length = kab_be16toh(response.message_length_be);
-    if (length > KAB_MAX_MESSAGE_SIZE) {
+    uint16_t length = k4a_be16toh(response.message_length_be);
+    if (length > K4A_MAX_MESSAGE_SIZE) {
         close(descriptor);
         errno = EMSGSIZE;
         return -1;
     }
-    char incoming[KAB_MAX_MESSAGE_SIZE + 1];
+    char incoming[K4A_MAX_MESSAGE_SIZE + 1];
     if (length && read_all(descriptor, incoming, length)) {
         close(descriptor);
         errno = EPROTO;
         return -1;
     }
     incoming[length] = 0;
-    uint16_t status = kab_be16toh(response.status_be);
+    uint16_t status = k4a_be16toh(response.status_be);
     if (message_size) snprintf(message, message_size, "%s", incoming);
-    if (status != KAB_STATUS_OK) {
+    if (status != K4A_STATUS_OK) {
         close(descriptor);
         errno = EACCES;
         return -(int)status;
@@ -297,29 +297,29 @@ static int open_remote(const struct kab_config *global, struct kab_session *sess
     session->socket_fd = descriptor;
     session->remote_eof = 0;
     session->stats.connects++;
-    session->backoff_ms = KAB_INITIAL_BACKOFF_MS;
+    session->backoff_ms = K4A_INITIAL_BACKOFF_MS;
     return 0;
 }
 
-static void disconnect_session(struct kab_session *session, const char *reason) {
+static void disconnect_session(struct k4a_session *session, const char *reason) {
     if (session->socket_fd >= 0) {
         close(session->socket_fd);
         session->socket_fd = -1;
         session->stats.disconnects++;
         log_line("WARN", session->config->alias, "transport disconnected: %s", reason);
     }
-    kab_buffer_clear(&session->to_network);
-    kab_buffer_clear(&session->to_pty);
+    k4a_buffer_clear(&session->to_network);
+    k4a_buffer_clear(&session->to_pty);
     session->remote_eof = 0;
     session->reconnect_at_ms = monotonic_ms() + session->backoff_ms;
-    if (session->backoff_ms < KAB_MAX_BACKOFF_MS) {
+    if (session->backoff_ms < K4A_MAX_BACKOFF_MS) {
         session->backoff_ms *= 2;
-        if (session->backoff_ms > KAB_MAX_BACKOFF_MS)
-            session->backoff_ms = KAB_MAX_BACKOFF_MS;
+        if (session->backoff_ms > K4A_MAX_BACKOFF_MS)
+            session->backoff_ms = K4A_MAX_BACKOFF_MS;
     }
 }
 
-static int retry_connect(const struct kab_config *global, struct kab_session *session,
+static int retry_connect(const struct k4a_config *global, struct k4a_session *session,
                          uint64_t now) {
     if (!session->config->online) return 0;
     if (session->socket_fd >= 0 || now < session->reconnect_at_ms) return 0;
@@ -334,21 +334,21 @@ static int retry_connect(const struct kab_config *global, struct kab_session *se
         log_line("ERROR", session->config->alias, "open rejected (%d): %s", -result,
                  message[0] ? message : "no detail");
     session->reconnect_at_ms = now + session->backoff_ms;
-    if (session->backoff_ms < KAB_MAX_BACKOFF_MS) {
+    if (session->backoff_ms < K4A_MAX_BACKOFF_MS) {
         session->backoff_ms *= 2;
-        if (session->backoff_ms > KAB_MAX_BACKOFF_MS)
-            session->backoff_ms = KAB_MAX_BACKOFF_MS;
+        if (session->backoff_ms > K4A_MAX_BACKOFF_MS)
+            session->backoff_ms = K4A_MAX_BACKOFF_MS;
     }
     return result;
 }
 
-static int read_into(int descriptor, struct kab_buffer *buffer, uint64_t *counter,
+static int read_into(int descriptor, struct k4a_buffer *buffer, uint64_t *counter,
                      uint64_t *calls) {
-    size_t available = kab_buffer_writable(buffer);
+    size_t available = k4a_buffer_writable(buffer);
     if (!available) return 0;
-    ssize_t result = read(descriptor, kab_buffer_write_ptr(buffer), available);
+    ssize_t result = read(descriptor, k4a_buffer_write_ptr(buffer), available);
     if (result > 0) {
-        kab_buffer_produced(buffer, (size_t)result);
+        k4a_buffer_produced(buffer, (size_t)result);
         *counter += (uint64_t)result;
         (*calls)++;
         return 0;
@@ -358,15 +358,15 @@ static int read_into(int descriptor, struct kab_buffer *buffer, uint64_t *counte
     return result == 0 ? 1 : -1;
 }
 
-static int write_from(int descriptor, struct kab_buffer *buffer, uint64_t *counter,
+static int write_from(int descriptor, struct k4a_buffer *buffer, uint64_t *counter,
                       uint64_t *calls, int is_socket) {
-    size_t available = kab_buffer_readable(buffer);
+    size_t available = k4a_buffer_readable(buffer);
     if (!available) return 0;
     ssize_t result = is_socket
-        ? send(descriptor, kab_buffer_read_ptr(buffer), available, MSG_NOSIGNAL)
-        : write(descriptor, kab_buffer_read_ptr(buffer), available);
+        ? send(descriptor, k4a_buffer_read_ptr(buffer), available, MSG_NOSIGNAL)
+        : write(descriptor, k4a_buffer_read_ptr(buffer), available);
     if (result > 0) {
-        kab_buffer_consumed(buffer, (size_t)result);
+        k4a_buffer_consumed(buffer, (size_t)result);
         *counter += (uint64_t)result;
         (*calls)++;
         return 0;
@@ -376,7 +376,7 @@ static int write_from(int descriptor, struct kab_buffer *buffer, uint64_t *count
     return -1;
 }
 
-static void process_session_events(struct kab_session *session,
+static void process_session_events(struct k4a_session *session,
                                    short pty_events, short socket_events) {
     if (session->socket_fd < 0) return;
     if (socket_events & (POLLERR | POLLNVAL)) {
@@ -412,11 +412,11 @@ static void process_session_events(struct kab_session *session,
         return;
     }
     if (socket_events & POLLHUP) session->remote_eof = 1;
-    if (session->remote_eof && !kab_buffer_readable(&session->to_pty))
+    if (session->remote_eof && !k4a_buffer_readable(&session->to_pty))
         disconnect_session(session, "socket closed");
 }
 
-static void print_stats(const struct kab_session *session) {
+static void print_stats(const struct k4a_session *session) {
     log_line("STAT", session->config->alias,
              "connected=%s pty_rx=%llu pty_tx=%llu net_rx=%llu net_tx=%llu "
              "connects=%llu disconnects=%llu errors=%llu",
@@ -430,13 +430,13 @@ static void print_stats(const struct kab_session *session) {
              (unsigned long long)session->stats.errors);
 }
 
-static int run_bridge(const struct kab_config *config) {
-    struct kab_session sessions[KAB_MAX_DEVICES] = {0};
+static int run_bridge(const struct k4a_config *config) {
+    struct k4a_session sessions[K4A_MAX_DEVICES] = {0};
     for (size_t index = 0; index < config->device_count; index++) {
         sessions[index].config = &config->devices[index];
         sessions[index].pty_fd = -1;
         sessions[index].socket_fd = -1;
-        sessions[index].backoff_ms = KAB_INITIAL_BACKOFF_MS;
+        sessions[index].backoff_ms = K4A_INITIAL_BACKOFF_MS;
         if (make_pty(&sessions[index]) || publish_pty(&sessions[index])) {
             log_line("ERROR", config->devices[index].alias, "PTY setup failed: %s",
                      strerror(errno));
@@ -450,23 +450,23 @@ static int run_bridge(const struct kab_config *config) {
     uint64_t next_stats = monotonic_ms() + (uint64_t)config->log_interval_seconds * 1000u;
     while (!stop_requested) {
         uint64_t now = monotonic_ms();
-        struct pollfd descriptors[KAB_MAX_DEVICES * 2];
+        struct pollfd descriptors[K4A_MAX_DEVICES * 2];
         size_t descriptor_count = 0;
         for (size_t index = 0; index < config->device_count; index++) {
-            struct kab_session *session = &sessions[index];
+            struct k4a_session *session = &sessions[index];
             retry_connect(config, session, now);
             descriptors[descriptor_count++] = (struct pollfd){
                 .fd = session->pty_fd,
                 .events = session->socket_fd >= 0
-                    ? (short)((kab_buffer_writable(&session->to_network) ? POLLIN : 0) |
-                              (kab_buffer_readable(&session->to_pty) ? POLLOUT : 0))
+                    ? (short)((k4a_buffer_writable(&session->to_network) ? POLLIN : 0) |
+                              (k4a_buffer_readable(&session->to_pty) ? POLLOUT : 0))
                     : 0,
             };
             descriptors[descriptor_count++] = (struct pollfd){
                 .fd = session->socket_fd,
                 .events = session->socket_fd >= 0
-                    ? (short)((!session->remote_eof && kab_buffer_writable(&session->to_pty) ? POLLIN : 0) |
-                              (kab_buffer_readable(&session->to_network) ? POLLOUT : 0))
+                    ? (short)((!session->remote_eof && k4a_buffer_writable(&session->to_pty) ? POLLIN : 0) |
+                              (k4a_buffer_readable(&session->to_network) ? POLLOUT : 0))
                     : 0,
             };
         }
@@ -511,7 +511,7 @@ int main(int argc, char **argv) {
     for (int index = 1; index < argc; index++) {
         if (!strcmp(argv[index], "--check-config")) check_only = 1;
         else if (!strcmp(argv[index], "--version")) {
-            puts("klipper-android-bridge " KAB_VERSION);
+            puts("klipper-android-bridge " K4A_VERSION);
             return 0;
         } else if (!strcmp(argv[index], "--help")) {
             usage(stdout, argv[0]);
@@ -526,9 +526,9 @@ int main(int argc, char **argv) {
         usage(stderr, argv[0]);
         return 2;
     }
-    struct kab_config config;
+    struct k4a_config config;
     char error[512];
-    if (kab_config_load(path, &config, error, sizeof(error))) {
+    if (k4a_config_load(path, &config, error, sizeof(error))) {
         fprintf(stderr, "configuration error: %s\n", error);
         return 2;
     }

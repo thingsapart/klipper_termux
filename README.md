@@ -1,4 +1,4 @@
-# Klipper Android Bridge
+# K4A — Klipper for Android
 
 Run an unmodified Klipper host natively in Termux while a small Android app owns the USB serial connection required by Android's security model.
 
@@ -54,10 +54,10 @@ both build scripts derive these first two values automatically; explicit values
 remain available for forks, mirrors, or non-`main` builds:
 
 ```sh
-KAB_INSTALLER_URL=https://raw.githubusercontent.com/OWNER/REPO/main/installer/install.sh \
-KAB_REPOSITORY_URL=https://github.com/OWNER/REPO.git \
-KAB_TERMUX_DOWNLOAD_URL=https://f-droid.org/packages/com.termux/ \
-KAB_TERMUX_GITHUB_RELEASES_URL=https://github.com/termux/termux-app/releases \
+K4A_INSTALLER_URL=https://raw.githubusercontent.com/OWNER/REPO/main/installer/install.sh \
+K4A_REPOSITORY_URL=https://github.com/OWNER/REPO.git \
+K4A_TERMUX_DOWNLOAD_URL=https://f-droid.org/packages/com.termux/ \
+K4A_TERMUX_GITHUB_RELEASES_URL=https://github.com/termux/termux-app/releases \
 scripts/build-app.sh
 ```
 
@@ -92,10 +92,10 @@ For a real release, keep the keystore outside the repository and provide all
 four signing values:
 
 ```sh
-export KAB_SIGNING_STORE_FILE=/secure/path/klipper-bridge-release.jks
-export KAB_SIGNING_STORE_PASSWORD='...'
-export KAB_SIGNING_KEY_ALIAS=klipper-bridge
-export KAB_SIGNING_KEY_PASSWORD='...'
+export K4A_SIGNING_STORE_FILE=/secure/path/klipper-bridge-release.jks
+export K4A_SIGNING_STORE_PASSWORD='...'
+export K4A_SIGNING_KEY_ALIAS=klipper-bridge
+export K4A_SIGNING_KEY_PASSWORD='...'
 scripts/prepare-release.sh 0.1.0
 ```
 
@@ -116,8 +116,8 @@ release**, select the pushed tag, and upload the APK and `.sha256` from `dist/`.
 Mark debug-signed builds as prereleases.
 
 The `origin` remote is the single normal source of repository identity for APK
-builds. `KAB_SOURCE_REF` defaults to `main` and can select another published
-branch. `KAB_REPOSITORY_URL` and `KAB_INSTALLER_URL` override inference when
+builds. `K4A_SOURCE_REF` defaults to `main` and can select another published
+branch. `K4A_REPOSITORY_URL` and `K4A_INSTALLER_URL` override inference when
 needed. Placeholder strings remaining in Android defaults and tests are guards:
 they keep one-tap installation disabled in builds that have no configured
 repository and do not need manual replacement.

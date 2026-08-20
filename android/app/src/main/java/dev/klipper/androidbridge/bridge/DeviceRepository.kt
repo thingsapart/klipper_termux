@@ -94,6 +94,12 @@ class DeviceRepository(context: Context) {
         preferences.edit().putBoolean("ssh_setup_handled", true).apply()
     }
 
+    fun sshAutoStart(): Boolean = preferences.getBoolean("ssh_auto_start", true)
+
+    fun setSshAutoStart(enabled: Boolean) {
+        preferences.edit().putBoolean("ssh_auto_start", enabled).apply()
+    }
+
     fun driverOverride(device: UsbDevice): UsbSerialDriverKind? =
         preferences.getString("usb_driver.${usbId(device)}", null)?.let {
             runCatching { UsbSerialDriverKind.valueOf(it) }.getOrNull()

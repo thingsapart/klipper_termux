@@ -390,7 +390,7 @@ The convenient entry point is:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/OWNER/REPOSITORY/main/installer/install.sh | \
-  KAB_REPOSITORY=https://github.com/OWNER/REPOSITORY.git bash
+  K4A_REPOSITORY=https://github.com/OWNER/REPOSITORY.git bash
 ```
 
 Flags are supported with:

@@ -11,8 +11,10 @@ android {
         applicationId = "dev.klipper.configurator"
         minSdk = 24
         targetSdk = 35
-        versionCode = providers.gradleProperty("kabVersionCode").orElse("1").get().toInt()
-        versionName = providers.gradleProperty("kabVersionName").orElse("0.1.0").get()
+        versionCode = providers.gradleProperty("k4aVersionCode")
+            .orElse(providers.gradleProperty("kabVersionCode")).orElse("1").get().toInt()
+        versionName = providers.gradleProperty("k4aVersionName")
+            .orElse(providers.gradleProperty("kabVersionName")).orElse("0.1.0").get()
     }
 
     buildTypes {

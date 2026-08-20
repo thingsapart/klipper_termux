@@ -3,6 +3,8 @@ set -euo pipefail
 
 SERVICES=(@SERVICES@)
 PREFIX="@PREFIX@"
+HOME_DIR="@HOME@"
+STATE_DIR="$HOME_DIR/.local/state/klipper-android"
 export SVDIR="$PREFIX/var/service"
 export LOGDIR="$PREFIX/var/log"
 
@@ -34,6 +36,10 @@ case "${1:-status}" in
   start)
     ensure_supervisor
     sv up "${SERVICES[@]}"
+    if [[ -d "$PREFIX/var/service/sshd" && -e "$STATE_DIR/ssh-autostart" ]]; then
+      rm -f "$PREFIX/var/service/sshd/down"
+      sv up sshd
+    fi
     sv status "${SERVICES[@]}" || true
     ;;
   stop)

@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 bash -n "$ROOT/installer/install.sh"
-for script in "$ROOT"/installer/services/*.run "$ROOT/installer/kabctl" \
+for script in "$ROOT"/installer/services/*.run "$ROOT/installer/klctl" \
   "$ROOT/installer/klipper-android-runner" "$ROOT/bridge/build-termux.sh" \
   "$ROOT/scripts/build-app.sh" "$ROOT/scripts/build-and-upload-app.sh" \
   "$ROOT/scripts/prepare-release.sh" "$ROOT/scripts/repository-env.sh"; do
@@ -11,23 +11,24 @@ for script in "$ROOT"/installer/services/*.run "$ROOT/installer/kabctl" \
 done
 
 (
-  resolver_root="$(mktemp -d "${TMPDIR:-/tmp}/kab-repository-test.XXXXXX")"
+  resolver_root="$(mktemp -d "${TMPDIR:-/tmp}/k4a-repository-test.XXXXXX")"
   trap 'rm -rf "$resolver_root"' EXIT
   git -C "$resolver_root" init -q
   git -C "$resolver_root" remote add origin git@github.com:example-owner/example-repo.git
-  unset KAB_REPOSITORY_URL KAB_INSTALLER_URL
+  unset K4A_REPOSITORY_URL K4A_INSTALLER_URL
   # shellcheck source=../../scripts/repository-env.sh
   source "$ROOT/scripts/repository-env.sh"
-  kab_resolve_repository_urls "$resolver_root"
-  [[ "$KAB_REPOSITORY_URL" == "https://github.com/example-owner/example-repo.git" ]]
-  [[ "$KAB_INSTALLER_URL" == "https://raw.githubusercontent.com/example-owner/example-repo/main/installer/install.sh" ]]
+  k4a_resolve_repository_urls "$resolver_root"
+  [[ "$K4A_REPOSITORY_URL" == "https://github.com/example-owner/example-repo.git" ]]
+  [[ "$K4A_INSTALLER_URL" == "https://raw.githubusercontent.com/example-owner/example-repo/main/installer/install.sh" ]]
 )
 rendered_runner="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/data/data/com.termux/files/usr|g' \
+  -e 's|@HOME@|/data/data/com.termux/files/home|g' \
   "$ROOT/installer/klipper-android-runner")"
 bash -n - <<<"$rendered_runner"
-if grep -q '@SERVICES@\|@PREFIX@' <<<"$rendered_runner"; then
+if grep -q '@SERVICES@\|@PREFIX@\|@HOME@' <<<"$rendered_runner"; then
   echo "runner contains an unrendered template value" >&2
   exit 1
 fi
@@ -41,7 +42,7 @@ grep -q 'PYTHONPATH="/data/data/com.termux/files/home/moonraker"' \
   <<<"$rendered_moonraker_service"
 grep -q '/.local/bin/moonraker-android.py' <<<"$rendered_moonraker_service"
 
-moonraker_wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-moonraker-wrapper.XXXXXX")"
+moonraker_wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-moonraker-wrapper.XXXXXX")"
 mkdir -p "$moonraker_wrapper_home/moonraker" "$moonraker_wrapper_home/python-hooks"
 cp "$ROOT/installer/moonraker-android.py" "$moonraker_wrapper_home/moonraker-android.py"
 cat >"$moonraker_wrapper_home/python-hooks/sitecustomize.py" <<'PY'
@@ -70,7 +71,7 @@ if PYTHONPATH="$moonraker_wrapper_home/python-hooks:$moonraker_wrapper_home" \
 fi
 rm -rf "$moonraker_wrapper_home"
 
-wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-klippy-wrapper.XXXXXX")"
+wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-klippy-wrapper.XXXXXX")"
 mkdir -p "$wrapper_home/klipper/klippy/chelper" "$wrapper_home/python-hooks"
 sed -e "s|@HOME@|$wrapper_home|g" \
   -e "s|@PREFIX@|$wrapper_home/usr|g" \
@@ -156,30 +157,32 @@ sh -n - <<<"$rendered_klipper_service"
 grep -q '/.local/bin/klippy-android.py' <<<"$rendered_klipper_service"
 grep -q '/var/run/klipper-android/klippy-gcode' <<<"$rendered_klipper_service"
 
-rendered_kabctl="$(sed \
+rendered_klctl="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/data/data/com.termux/files/usr|g' \
   -e 's|@HOME@|/data/data/com.termux/files/home|g' \
   -e 's|@DATA_DIR@|/data/data/com.termux/files/home/printer_data|g' \
   -e 's|@WEB_PORT@|8080|g' \
-  "$ROOT/installer/kabctl")"
-bash -n - <<<"$rendered_kabctl"
-if grep -q '@SERVICES@\|@PREFIX@\|@HOME@\|@DATA_DIR@\|@WEB_PORT@' <<<"$rendered_kabctl"; then
-  echo "kabctl contains an unrendered template value" >&2
+  "$ROOT/installer/klctl")"
+bash -n - <<<"$rendered_klctl"
+if grep -q '@SERVICES@\|@PREFIX@\|@HOME@\|@DATA_DIR@\|@WEB_PORT@' <<<"$rendered_klctl"; then
+  echo "klctl contains an unrendered template value" >&2
   exit 1
 fi
-doctor_output="$(NO_COLOR=1 bash -c "$rendered_kabctl" kabctl doctor 2>&1 || true)"
+doctor_output="$(NO_COLOR=1 bash -c "$rendered_klctl" klctl doctor 2>&1 || true)"
 grep -Fq '[FAIL] native bridge executable' <<<"$doctor_output"
 grep -Fq '[FAIL] Klipper Android launcher' <<<"$doctor_output"
 grep -Fq '[FAIL] doctor found' <<<"$doctor_output"
 
-output="$(PREFIX=/not/termux HOME=/tmp/kab-installer-test \
+output="$(PREFIX=/not/termux HOME=/tmp/k4a-installer-test \
   bash "$ROOT/installer/install.sh" --dry-run --source-dir "$ROOT" --klipper-only)"
 grep -q 'Building native PTY bridge' <<<"$output"
 grep -q 'Installing native Klipper' <<<"$output"
 grep -q 'Installation complete' <<<"$output"
 grep -q 'klipper-android-runner' <<<"$output"
-grep -q 'ln -sfn /tmp/kab-installer-test/.local/bin/kabctl /not/termux/bin/kabctl' <<<"$output"
+grep -q 'ssh-autostart' "$ROOT/installer/klctl"
+grep -q 'var/service/sshd/down' "$ROOT/installer/klipper-android-runner"
+grep -q 'ln -sfn /tmp/k4a-installer-test/.local/bin/klctl /not/termux/bin/klctl' <<<"$output"
 grep -q 'allow-external-apps = true' <<<"$output"
 grep -q 'fetch --depth=1 --no-tags origin' <<<"$output"
 grep -q 'pip install --no-cache-dir' <<<"$output"
@@ -209,13 +212,23 @@ migrated_bridge_line="$(printf '%s\n' \
   exit 1
 }
 
-stdin_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-stdin-test.XXXXXX")"
+stdin_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-stdin-test.XXXXXX")"
 PREFIX=/not/termux HOME="$stdin_home" \
   bash -s -- --dry-run --source-dir "$ROOT" --klipper-only \
   <"$ROOT/installer/install.sh" >/dev/null
 rm -rf "$stdin_home"
 
-reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-reinstall-test.XXXXXX")"
+migration_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-config-migration-test.XXXXXX")"
+mkdir -p "$migration_home/printer_data/config/kab"
+printf '[include kab/current.cfg]\n' >"$migration_home/printer_data/config/printer.cfg"
+printf '# legacy managed config\n' >"$migration_home/printer_data/config/kab/current.cfg"
+migration_output="$(PREFIX=/not/termux HOME="$migration_home" \
+  bash "$ROOT/installer/install.sh" --dry-run --update --source-dir "$ROOT" --klipper-only)"
+grep -q 'Migrating managed configuration from KAB to K4A' <<<"$migration_output"
+grep -q 'rewrite managed KAB include' <<<"$migration_output"
+rm -rf "$migration_home"
+
+reinstall_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-reinstall-test.XXXXXX")"
 trap 'rm -rf "$reinstall_home"' EXIT
 mkdir -p "$reinstall_home/printer_data/config"
 touch "$reinstall_home/printer_data/config/printer.cfg"
@@ -252,7 +265,7 @@ if grep -q '(( is_new )) &&' "$ROOT/installer/install.sh"; then
   exit 1
 fi
 
-hostname_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-hostname-test.XXXXXX")"
+hostname_home="$(mktemp -d "${TMPDIR:-/tmp}/k4a-hostname-test.XXXXXX")"
 mkdir -p "$hostname_home/printer_data/config"
 cp "$ROOT/installer/config/moonraker.conf" "$hostname_home/printer_data/config/moonraker.conf"
 sed \
@@ -260,42 +273,81 @@ sed \
   -e "s|@DATA_DIR@|$hostname_home/printer_data|g" \
   "$ROOT/installer/config/printer.cfg.example" \
   >"$hostname_home/printer_data/config/printer.cfg.example"
-hostname_kabctl="$(sed \
+hostname_klctl="$(sed \
   -e 's|@SERVICES@|klipper-android-bridge klipper moonraker klipper-web|g' \
   -e 's|@PREFIX@|/not/termux|g' \
   -e "s|@HOME@|$hostname_home|g" \
   -e "s|@DATA_DIR@|$hostname_home/printer_data|g" \
   -e 's|@WEB_PORT@|8080|g' \
-  "$ROOT/installer/kabctl")"
-bash -c "$hostname_kabctl" kabctl hostname workshop-printer >/dev/null
+  "$ROOT/installer/klctl")"
+bash -c "$hostname_klctl" klctl hostname workshop-printer >/dev/null
 grep -q '^mdns_hostname: workshop-printer$' \
   "$hostname_home/printer_data/config/moonraker.conf"
-if bash -c "$hostname_kabctl" kabctl hostname invalid.name >/dev/null 2>&1; then
-  echo "kabctl accepted an invalid mDNS hostname" >&2
+if bash -c "$hostname_klctl" klctl hostname invalid.name >/dev/null 2>&1; then
+  echo "klctl accepted an invalid mDNS hostname" >&2
   exit 1
 fi
-bash -c "$hostname_kabctl" kabctl printer-starter >/dev/null
+bash -c "$hostname_klctl" klctl printer-starter >/dev/null
 grep -q '^# Managed starter configuration for Klipper Android' \
   "$hostname_home/printer_data/config/printer.cfg"
 grep -q '^\[virtual_sdcard\]$' "$hostname_home/printer_data/config/printer.cfg"
 printf '[printer]\nkinematics: none\n# user-owned\n' \
   >"$hostname_home/printer_data/config/printer.cfg"
-bash -c "$hostname_kabctl" kabctl printer-starter >/dev/null
+bash -c "$hostname_klctl" klctl printer-starter >/dev/null
 grep -q '^# user-owned$' "$hostname_home/printer_data/config/printer.cfg"
-grep -q 'pkg install -y openssh' "$ROOT/installer/kabctl"
-grep -q 'Port 2020' "$ROOT/installer/kabctl"
-grep -q '^[[:space:]]*passwd$' "$ROOT/installer/kabctl"
-grep -q 'SVDIR="\$PREFIX/var/service" sv-enable sshd' "$ROOT/installer/kabctl"
-grep -q '/dev/tcp/127.0.0.1/2020' "$ROOT/installer/kabctl"
-grep -q '"\$PREFIX/bin/timeout" 3' "$ROOT/installer/kabctl"
-if grep -q 'telnet://127.0.0.1:2020' "$ROOT/installer/kabctl"; then
-  echo "kabctl doctor still uses curl's potentially hanging telnet handler" >&2
+grep -q 'pkg install -y openssh' "$ROOT/installer/klctl"
+grep -q 'Port 2020' "$ROOT/installer/klctl"
+grep -q '^[[:space:]]*passwd$' "$ROOT/installer/klctl"
+grep -q 'SVDIR="\$PREFIX/var/service" sv-enable sshd' "$ROOT/installer/klctl"
+grep -q '/dev/tcp/127.0.0.1/2020' "$ROOT/installer/klctl"
+grep -q '"\$PREFIX/bin/timeout" 3' "$ROOT/installer/klctl"
+if grep -q 'telnet://127.0.0.1:2020' "$ROOT/installer/klctl"; then
+  echo "klctl doctor still uses curl's potentially hanging telnet handler" >&2
   exit 1
 fi
-if grep -q 'ss -ltn' "$ROOT/installer/kabctl"; then
-  echo "kabctl doctor still relies on Android-restricted socket diagnostics" >&2
+if grep -q 'ss -ltn' "$ROOT/installer/klctl"; then
+  echo "klctl doctor still relies on Android-restricted socket diagnostics" >&2
   exit 1
 fi
+
+ssh_test_root="$(mktemp -d "${TMPDIR:-/tmp}/k4a-ssh-service-test.XXXXXX")"
+mkdir -p "$ssh_test_root/prefix/bin" "$ssh_test_root/prefix/var/service/sshd" \
+  "$ssh_test_root/home" "$ssh_test_root/fakebin"
+ssh_state="$ssh_test_root/ssh-listening"
+cat >"$ssh_test_root/fakebin/service-daemon" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat >"$ssh_test_root/fakebin/sv" <<'SH'
+#!/usr/bin/env bash
+while [[ "${1:-}" == -* ]]; do shift; [[ "${1:-}" =~ ^[0-9]+$ ]] && shift; done
+case "${1:-}" in
+  up|once|restart) touch "$SSH_TEST_STATE" ;;
+  down) rm -f "$SSH_TEST_STATE" ;;
+esac
+SH
+cat >"$ssh_test_root/prefix/bin/timeout" <<'SH'
+#!/usr/bin/env bash
+[[ -e "$SSH_TEST_STATE" ]] && printf 'SSH-2.0-test\r\n'
+SH
+chmod +x "$ssh_test_root/fakebin/service-daemon" "$ssh_test_root/fakebin/sv" \
+  "$ssh_test_root/prefix/bin/timeout"
+ssh_klctl="$ssh_test_root/klctl"
+sed -e 's|@SERVICES@|klipper-android-bridge klipper|g' \
+  -e "s|@PREFIX@|$ssh_test_root/prefix|g" \
+  -e "s|@HOME@|$ssh_test_root/home|g" \
+  -e "s|@DATA_DIR@|$ssh_test_root/home/printer_data|g" \
+  -e 's|@WEB_PORT@|8080|g' "$ROOT/installer/klctl" >"$ssh_klctl"
+PATH="$ssh_test_root/fakebin:$PATH" SSH_TEST_STATE="$ssh_state" \
+  bash "$ssh_klctl" ssh-start auto
+[[ -e "$ssh_state" ]]
+[[ -e "$ssh_test_root/home/.local/state/klipper-android/ssh-autostart" ]]
+PATH="$ssh_test_root/fakebin:$PATH" SSH_TEST_STATE="$ssh_state" \
+  bash "$ssh_klctl" ssh-stop
+[[ ! -e "$ssh_state" ]]
+[[ -e "$ssh_test_root/prefix/var/service/sshd/down" ]]
+[[ -e "$ssh_test_root/home/.local/state/klipper-android/ssh-autostart" ]]
+rm -rf "$ssh_test_root"
 grep -q 'starter-config-installed' "$ROOT/installer/install.sh"
 grep -q 'A real printer.cfg is user data and must never be replaced by UPDATE' \
   "$ROOT/installer/install.sh"

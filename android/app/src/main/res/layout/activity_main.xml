@@ -5,6 +5,7 @@
     android:layout_height="match_parent">
 
     <LinearLayout
+        android:id="@+id/app_bar"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
@@ -249,68 +250,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="11dp"
                     android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_panel_header"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:padding="13dp">
-
-                        <TextView
-                            style="@style/MainsailCardTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/usb_bridge" />
-
-                        <TextView
-                            android:id="@+id/service_badge"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/bg_status_chip_off"
-                            android:fontFamily="sans-serif-medium"
-                            android:text="@string/status_stopped"
-                            android:textColor="@color/mainsail_text_secondary"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:background="@drawable/bg_panel_body"
-                        android:orientation="vertical"
-                        android:padding="14dp">
-
-                        <TextView
-                            android:id="@+id/service_status"
-                            style="@style/MainsailBodyText"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="11dp"
-                            android:orientation="horizontal">
-                            <Button android:id="@+id/start_service" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/start_bridge" />
-                            <Button android:id="@+id/stop_service" style="@style/MainsailButtonSecondary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/stop" />
-                        </LinearLayout>
-                    </LinearLayout>
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="11dp"
-                    android:orientation="vertical">
                     <TextView style="@style/PanelHeaderStandalone" android:text="@string/klipper_stack" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/stack_description" />
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="11dp" android:orientation="horizontal">
-                            <Button android:id="@+id/start_termux" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/start_everything" />
-                            <Button android:id="@+id/stop_termux" style="@style/MainsailButtonDanger" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/stop_stack" />
+                        <LinearLayout android:id="@+id/klipper_control_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="11dp" android:background="@drawable/bg_service_stopped" android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="14dp" android:paddingRight="8dp">
+                            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-medium" android:text="@string/klipper_stack" android:textColor="@color/mainsail_text_primary" android:textSize="15sp" />
+                            <Switch android:id="@+id/klipper_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_everything" android:showText="false" />
+                        </LinearLayout>
+                        <LinearLayout android:id="@+id/ssh_control_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_service_stopped" android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="14dp" android:paddingRight="8dp">
+                            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-medium" android:text="SSH" android:textColor="@color/mainsail_text_primary" android:textSize="15sp" />
+                            <Switch android:id="@+id/ssh_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_ssh" android:showText="false" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
@@ -446,7 +395,7 @@
                         <TextView android:id="@+id/pairing_command" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:fontFamily="monospace" android:padding="12dp" android:textColor="@color/mainsail_primary" android:textIsSelectable="true" android:textSize="12sp" />
                         <Button android:id="@+id/wizard_send_pairing" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/send_pairing_to_termux" />
                         <Button android:id="@+id/wizard_create_starter_config" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/create_starter_config" />
-                        <Button android:id="@+id/wizard_usb_action" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/start_bridge" />
+                        <Button android:id="@+id/wizard_usb_action" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/prepare_usb" />
                         <Button android:id="@+id/regenerate_token" style="@style/MainsailButtonSecondary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="@string/regenerate_token" />
                     </LinearLayout>
                 </LinearLayout>
@@ -478,6 +427,7 @@
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/install_and_setup_description" />
                         <Button android:id="@+id/open_setup_wizard" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/install_and_setup" />
+                        <Button android:id="@+id/update_klipper" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/update_klipper" />
                     </LinearLayout>
                 </LinearLayout>
                 <LinearLayout style="@style/WizardStep">
@@ -500,7 +450,11 @@
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/mdns_hostname_description" />
                         <EditText android:id="@+id/mdns_hostname" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:background="@drawable/bg_code" android:hint="@string/mdns_hostname_hint" android:importantForAutofill="no" android:inputType="textNoSuggestions" android:padding="12dp" android:singleLine="true" android:textColor="@color/mainsail_text_primary" android:textColorHint="@color/mainsail_text_muted" />
-                        <Button android:id="@+id/save_mdns_hostname" style="@style/MainsailButtonPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:layout_marginTop="8dp" android:text="@string/apply_hostname" />
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/android_device_name_description" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:baselineAligned="false" android:orientation="horizontal">
+                            <Button android:id="@+id/open_device_name_settings" style="@style/MainsailButtonSecondary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/open_device_name_settings" />
+                            <Button android:id="@+id/save_mdns_hostname" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/apply_hostname" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
                 <LinearLayout style="@style/WizardStep">
@@ -511,6 +465,13 @@
                         <EditText android:id="@+id/termux_github_releases_url" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:background="@drawable/bg_code" android:hint="@string/termux_github_releases_url_hint" android:importantForAutofill="no" android:inputType="textUri" android:padding="12dp" android:singleLine="true" android:textColor="@color/mainsail_text_primary" android:textColorHint="@color/mainsail_text_muted" />
                         <Button android:id="@+id/open_termux_github_releases" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/open_termux_github_releases" />
                         <Button android:id="@+id/save_termux_links" style="@style/MainsailButtonPrimary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:text="@string/save_download_links" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout style="@style/WizardStep">
+                    <TextView style="@style/PanelHeaderStandalone" android:text="@string/step_ssh" />
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/auto_start_ssh_description" />
+                        <Switch android:id="@+id/auto_start_ssh" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/auto_start_ssh" android:textColor="@color/mainsail_text_primary" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>

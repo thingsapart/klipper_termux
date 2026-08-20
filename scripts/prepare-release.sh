@@ -3,6 +3,12 @@ set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 source "$ROOT/scripts/repository-env.sh"
+: "${K4A_SIGNING_STORE_FILE:=${KAB_SIGNING_STORE_FILE:-}}"
+: "${K4A_SIGNING_STORE_PASSWORD:=${KAB_SIGNING_STORE_PASSWORD:-}}"
+: "${K4A_SIGNING_KEY_ALIAS:=${KAB_SIGNING_KEY_ALIAS:-}}"
+: "${K4A_SIGNING_KEY_PASSWORD:=${KAB_SIGNING_KEY_PASSWORD:-}}"
+: "${K4A_TERMUX_DOWNLOAD_URL:=${KAB_TERMUX_DOWNLOAD_URL:-}}"
+: "${K4A_TERMUX_GITHUB_RELEASES_URL:=${KAB_TERMUX_GITHUB_RELEASES_URL:-}}"
 VERSION=""
 VERSION_CODE=""
 TEST_SIGNING=0
@@ -14,10 +20,10 @@ Usage: scripts/prepare-release.sh VERSION [--version-code NUMBER] [--test-signin
 Builds, verifies, and places a universal APK plus SHA-256 file in dist/.
 
 Normal releases require these environment variables:
-  KAB_SIGNING_STORE_FILE
-  KAB_SIGNING_STORE_PASSWORD
-  KAB_SIGNING_KEY_ALIAS
-  KAB_SIGNING_KEY_PASSWORD
+  K4A_SIGNING_STORE_FILE
+  K4A_SIGNING_STORE_PASSWORD
+  K4A_SIGNING_KEY_ALIAS
+  K4A_SIGNING_KEY_PASSWORD
 
 --test-signing uses Android's local debug key. It is suitable only for private
 hardware tests or an explicitly marked GitHub prerelease.
@@ -69,31 +75,31 @@ command -v java >/dev/null 2>&1 || { echo "error: JDK 17-21 is required" >&2; ex
 SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 [[ -n "$SDK_ROOT" && -d "$SDK_ROOT" ]] || { echo "error: Android SDK not found" >&2; exit 1; }
 
-kab_resolve_repository_urls "$ROOT"
-[[ -n "${KAB_REPOSITORY_URL:-}" ]] || {
-  echo "error: set KAB_REPOSITORY_URL or configure a GitHub origin remote" >&2
+k4a_resolve_repository_urls "$ROOT"
+[[ -n "${K4A_REPOSITORY_URL:-}" ]] || {
+  echo "error: set K4A_REPOSITORY_URL or configure a GitHub origin remote" >&2
   exit 1
 }
-[[ -n "${KAB_INSTALLER_URL:-}" ]] || {
-  echo "error: set KAB_INSTALLER_URL" >&2
+[[ -n "${K4A_INSTALLER_URL:-}" ]] || {
+  echo "error: set K4A_INSTALLER_URL" >&2
   exit 1
 }
 
 SIGNING_NAMES=(
-  KAB_SIGNING_STORE_FILE KAB_SIGNING_STORE_PASSWORD
-  KAB_SIGNING_KEY_ALIAS KAB_SIGNING_KEY_PASSWORD
+  K4A_SIGNING_STORE_FILE K4A_SIGNING_STORE_PASSWORD
+  K4A_SIGNING_KEY_ALIAS K4A_SIGNING_KEY_PASSWORD
 )
 GRADLE_ARGS=(
   --no-daemon
-  "-PkabVersionName=$VERSION"
-  "-PkabVersionCode=$VERSION_CODE"
-  "-PkabInstallerUrl=$KAB_INSTALLER_URL"
-  "-PkabRepositoryUrl=$KAB_REPOSITORY_URL"
+  "-Pk4aVersionName=$VERSION"
+  "-Pk4aVersionCode=$VERSION_CODE"
+  "-Pk4aInstallerUrl=$K4A_INSTALLER_URL"
+  "-Pk4aRepositoryUrl=$K4A_REPOSITORY_URL"
 )
-[[ -n "${KAB_TERMUX_DOWNLOAD_URL:-}" ]] && GRADLE_ARGS+=("-PkabTermuxDownloadUrl=$KAB_TERMUX_DOWNLOAD_URL")
-[[ -n "${KAB_TERMUX_GITHUB_RELEASES_URL:-}" ]] && GRADLE_ARGS+=("-PkabTermuxGithubReleasesUrl=$KAB_TERMUX_GITHUB_RELEASES_URL")
+[[ -n "${K4A_TERMUX_DOWNLOAD_URL:-}" ]] && GRADLE_ARGS+=("-Pk4aTermuxDownloadUrl=$K4A_TERMUX_DOWNLOAD_URL")
+[[ -n "${K4A_TERMUX_GITHUB_RELEASES_URL:-}" ]] && GRADLE_ARGS+=("-Pk4aTermuxGithubReleasesUrl=$K4A_TERMUX_GITHUB_RELEASES_URL")
 if (( TEST_SIGNING )); then
-  GRADLE_ARGS+=("-PkabUseDebugSigning=true")
+  GRADLE_ARGS+=("-Pk4aUseDebugSigning=true")
 else
   for name in "${SIGNING_NAMES[@]}"; do
     [[ -n "${!name:-}" ]] || {
@@ -101,13 +107,13 @@ else
       exit 1
     }
   done
-  [[ -f "$KAB_SIGNING_STORE_FILE" ]] || {
-    echo "error: signing store does not exist: $KAB_SIGNING_STORE_FILE" >&2
+  [[ -f "$K4A_SIGNING_STORE_FILE" ]] || {
+    echo "error: signing store does not exist: $K4A_SIGNING_STORE_FILE" >&2
     exit 1
   }
-  SIGNING_STORE_DIR="$(CDPATH= cd -- "$(dirname -- "$KAB_SIGNING_STORE_FILE")" && pwd)"
-  KAB_SIGNING_STORE_FILE="$SIGNING_STORE_DIR/$(basename "$KAB_SIGNING_STORE_FILE")"
-  export KAB_SIGNING_STORE_FILE
+  SIGNING_STORE_DIR="$(CDPATH= cd -- "$(dirname -- "$K4A_SIGNING_STORE_FILE")" && pwd)"
+  K4A_SIGNING_STORE_FILE="$SIGNING_STORE_DIR/$(basename "$K4A_SIGNING_STORE_FILE")"
+  export K4A_SIGNING_STORE_FILE
 fi
 
 cd "$ROOT"

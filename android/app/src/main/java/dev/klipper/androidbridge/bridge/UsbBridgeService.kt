@@ -237,7 +237,7 @@ class UsbBridgeService : Service() {
         }
         return builder
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Klipper USB Bridge")
+            .setContentTitle("Klipper / Android")
             .setContentText("${sessions.size} active USB connection(s)")
             .setContentIntent(openIntent)
             .setOngoing(true)

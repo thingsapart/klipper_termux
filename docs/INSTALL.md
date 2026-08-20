@@ -3,7 +3,7 @@
 ## Current prototype workflow
 
 1. Build and install the debug APK from `android/app/build/outputs/apk/debug/app-debug.apk`.
-2. Open **Klipper USB Bridge** and start the bridge service. A printer MCU may be connected now or later.
+2. Open **Klipper For Android** and start the bridge service. A printer MCU may be connected now or later.
 3. When a printer is attached through OTG or a powered hub, grant USB access.
 4. In a current native Termux installation, clone this repository and run:
 
@@ -12,12 +12,12 @@
    ```
 
 5. Copy `~/printer_data/config/bridge.conf.example` to `bridge.conf` and replace `TOKEN`. The default `auto` selector uses the first permitted USB serial port.
-6. Run `kabctl printer-starter` to create a safe API-only `printer.cfg`. It
+6. Run `klctl printer-starter` to create a safe API-only `printer.cfg`. It
    publishes Klipper to Moonraker and enables Mainsail's virtual SD-card,
    pause/status, response, and object-exclusion components. It does not contain
    motion or heater pins. Replace it with the printer's real configuration,
    retaining the generated MCU PTY path and `restart_method: command`.
-7. Run `kabctl doctor`, then start the supervised stack:
+7. Run `klctl doctor`, then start the supervised stack:
 
    ```sh
    klipper-android-runner start
@@ -43,7 +43,7 @@ One-time setup is required:
 2. Leave the installer's external-app control enabled. It writes
    `allow-external-apps = true` to `~/.termux/termux.properties`; pass
    `--no-app-control` to opt out.
-3. In Android App Info for **Klipper USB Bridge**, grant the Termux
+3. In Android App Info for **Klipper for Android**, grant the Termux
    `RUN_COMMAND` permission, usually listed under Additional permissions.
 
 This is deliberately permission-gated: enabling external commands lets this
@@ -59,7 +59,7 @@ Open **Settings** from the navigation drawer or overflow menu, then tap
 **Install and Setup Klipper** to enter the guided checklist. The wizard detects
 Termux, command permission, USB permission, live bridge connections, and a
 working Mainsail page. It also shows a copyable curl installer command. APKs built
-with `KAB_INSTALLER_URL` and `KAB_REPOSITORY_URL` enable an **Install Klipper
+with `K4A_INSTALLER_URL` and `K4A_REPOSITORY_URL` enable an **Install Klipper
 in Termux** button that sends that fixed command through the same permission gate.
 Installation runs in a visible Termux terminal so progress and download or
 package-manager errors are not hidden; stack start/stop/status commands remain
@@ -71,7 +71,7 @@ retries the Android service with bounded backoff. Klipper can therefore start in
 an expected MCU-unavailable state while Moonraker and Mainsail remain testable.
 When a permitted serial device appears, Android binds the next OPEN request to
 the first available port; no config rewrite or service restart is required.
-**Configure Termux bridge** also asks `kabctl` to install the starter
+**Configure Termux bridge** also asks `klctl` to install the starter
 configuration when no user-owned `printer.cfg` exists. Existing printer-specific
 configuration is never overwritten. This is enough for Klipper and Moonraker to
 connect and expose configuration editing in Mainsail; connecting a physical
@@ -94,7 +94,7 @@ The dashboard shows the phone's preferred Wi-Fi/Ethernet IPv4 address and the
 corresponding Mainsail URL below System status. Tap it to copy the address.
 Moonraker advertises `klipper-android.local` through its built-in Zeroconf
 component by default. Change the label under **Settings → Network identity**;
-the app validates it, updates `moonraker.conf` through `kabctl`, and restarts
+the app validates it, updates `moonraker.conf` through `klctl`, and restarts
 Moonraker when it is already running. The companion bridge service holds an
 Android Wi-Fi multicast lock while active so mDNS remains reliable despite
 Android's multicast filtering. Direct IP access remains available on networks
@@ -129,7 +129,7 @@ nginx is added for Mainsail. The C bridge itself can be
 compiled directly with `bridge/build-termux.sh`, avoiding CMake and Ninja.
 
 The installer keeps its executables under `~/.local/bin` and creates managed
-links for `kabctl`, `klipper-android-runner`, and `klipper-android-bridge` in
+links for `klctl`, `klipper-android-runner`, and `klipper-android-bridge` in
 `$PREFIX/bin`. Termux already includes that directory in `PATH`, so the commands
 work immediately without editing `.bashrc`, `.zshrc`, or the current shell.
 
@@ -137,7 +137,7 @@ The eventual convenience form is:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/OWNER/REPOSITORY/main/installer/install.sh | \
-  KAB_REPOSITORY=https://github.com/OWNER/REPOSITORY.git bash
+  K4A_REPOSITORY=https://github.com/OWNER/REPOSITORY.git bash
 ```
 
 The repository URL remains a placeholder until this project is published. Downloading, inspecting, and executing the script separately is safer than curl-to-shell.
@@ -168,7 +168,7 @@ files. Automation may pass `--update` or `--reinstall` explicitly;
 
 Installer output is appended to
 `~/.local/state/klipper-android/installer.log` (rotated after 1 MiB). Inspect it
-with `kabctl installer-log`; failed commands include their approximate script
+with `klctl installer-log`; failed commands include their approximate script
 line and exit status. Klipper is launched through a small compatibility shim
 that ignores only Android's denial of `chmod(0660)` on a Klipper-created
 `/dev/pts/*` node. Other permission errors are preserved.

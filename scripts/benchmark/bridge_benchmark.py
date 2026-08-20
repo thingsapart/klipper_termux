@@ -71,7 +71,7 @@ def main() -> int:
     service = EchoService()
     service.start()
 
-    with tempfile.TemporaryDirectory(prefix="kab-benchmark-") as directory:
+    with tempfile.TemporaryDirectory(prefix="k4a-benchmark-") as directory:
         root = pathlib.Path(directory)
         link = root / "mcu"
         config = root / "bridge.conf"

@@ -99,7 +99,7 @@ def main() -> int:
     service.start()
     service.ready.wait(2)
 
-    with tempfile.TemporaryDirectory(prefix="kab-integration-") as directory:
+    with tempfile.TemporaryDirectory(prefix="k4a-integration-") as directory:
         root = pathlib.Path(directory)
         pty_link = root / "mcu"
         config = root / "bridge.conf"

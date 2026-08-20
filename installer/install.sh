@@ -109,11 +109,13 @@ MANAGED_FILES=(
   "$BIN_DIR/klippy-android.py"
   "$BIN_DIR/moonraker-android.py"
   "$BIN_DIR/klipper-android-runner"
+  "$BIN_DIR/klctl"
   "$BIN_DIR/kabctl"
 )
 MANAGED_LINKS=(
   "$PREFIX/bin/klipper-android-bridge"
   "$PREFIX/bin/klipper-android-runner"
+  "$PREFIX/bin/klctl"
   "$PREFIX/bin/kabctl"
 )
 
@@ -241,7 +243,7 @@ render_template() {
   local source="$1" destination="$2" force="${3:-0}" temporary=""
   if [[ -e "$destination" && "$force" != 1 ]]; then return 0; fi
   if (( DRY_RUN )); then printf '+ render %s -> %s\n' "$source" "$destination"; return 0; fi
-  temporary="$destination.kab-new.$$"
+  temporary="$destination.k4a-new.$$"
   sed -e "s|@PREFIX@|$PREFIX|g" \
       -e "s|@HOME@|$TERMUX_HOME|g" \
       -e "s|@DATA_DIR@|$DATA_DIR|g" \
@@ -267,9 +269,36 @@ run pkg install -y "${PACKAGES[@]}"
 run mkdir -p "$BIN_DIR" "$STATE_DIR" "$DATA_DIR/config" "$DATA_DIR/logs" \
   "$DATA_DIR/gcodes" "$DATA_DIR/database" "$SERVICE_ROOT"
 
+migrate_k4a_configuration() {
+  local legacy="$DATA_DIR/config/kab" current="$DATA_DIR/config/k4a"
+  local printer="$DATA_DIR/config/printer.cfg" temporary
+  [[ -d "$legacy" ]] || return 0
+  log "Migrating managed configuration from KAB to K4A"
+  if [[ -e "$current" ]]; then
+    diff -qr "$legacy" "$current" >/dev/null 2>&1 ||
+      die "both legacy KAB and K4A configuration directories exist and differ"
+    run rm -rf -- "$legacy"
+  else
+    run mv -- "$legacy" "$current"
+  fi
+  if [[ -f "$printer" ]]; then
+    if (( DRY_RUN )); then
+      printf '+ rewrite managed KAB include in %s\n' "$printer"
+    else
+      temporary="$printer.k4a-migration.$$"
+      sed 's|\[include kab/|[include k4a/|g' "$printer" >"$temporary"
+      chmod --reference="$printer" "$temporary" 2>/dev/null || chmod 0600 "$temporary"
+      mv -f -- "$temporary" "$printer"
+    fi
+  fi
+}
+migrate_k4a_configuration
+
 if [[ -z "$SOURCE_DIR" ]]; then
-  REPOSITORY="${KAB_REPOSITORY:-}"
-  [[ -n "$REPOSITORY" ]] || die "set KAB_REPOSITORY to this project's public Git URL"
+  # KAB_REPOSITORY is accepted for one transition release because installed
+  # versions of the Android app still send it while launching UPDATE.
+  REPOSITORY="${K4A_REPOSITORY:-${KAB_REPOSITORY:-}}"
+  [[ -n "$REPOSITORY" ]] || die "set K4A_REPOSITORY to this project's public Git URL"
   if [[ -d "$SOURCE_INSTALL_DIR/.git" ]]; then
     log "Updating bridge source"
     run git -C "$SOURCE_INSTALL_DIR" fetch --depth=1 --no-tags origin HEAD
@@ -326,9 +355,9 @@ if (( UPDATE )); then
     render_template "$SOURCE_DIR/installer/config/nginx.conf" "$DATA_DIR/config/nginx.conf" 1
     repair_existing_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
   fi
-  render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
+  render_template "$SOURCE_DIR/installer/klctl" "$BIN_DIR/klctl" 1
   render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
-  run chmod 0755 "$BIN_DIR/kabctl" "$BIN_DIR/klipper-android-runner"
+  run chmod 0755 "$BIN_DIR/klctl" "$BIN_DIR/klipper-android-runner"
 fi
 
 BRIDGE_OUTPUT="$STATE_DIR/klipper-android-bridge"
@@ -559,9 +588,9 @@ if (( INSTALL_UI )); then
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi
 
-render_template "$SOURCE_DIR/installer/kabctl" "$BIN_DIR/kabctl" 1
+render_template "$SOURCE_DIR/installer/klctl" "$BIN_DIR/klctl" 1
 render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
-run chmod 0755 "$BIN_DIR/kabctl" "$BIN_DIR/klipper-android-runner"
+run chmod 0755 "$BIN_DIR/klctl" "$BIN_DIR/klipper-android-runner"
 
 install_command_link() {
   local name="$1" target="$BIN_DIR/$1" link="$PREFIX/bin/$1"
@@ -575,7 +604,21 @@ install_command_link() {
 }
 install_command_link klipper-android-bridge
 install_command_link klipper-android-runner
-install_command_link kabctl
+install_command_link klctl
+
+# Keep the previous command usable while an already-installed APK is upgraded.
+for legacy_link in "$BIN_DIR/kabctl" "$PREFIX/bin/kabctl"; do
+  if [[ -e "$legacy_link" && ! -L "$legacy_link" ]]; then
+    # The old managed script is safe to replace during this explicit migration.
+    if [[ "$legacy_link" == "$BIN_DIR/kabctl" ]]; then
+      run rm -f -- "$legacy_link"
+    else
+      die "refusing to replace existing compatibility command: $legacy_link"
+    fi
+  fi
+done
+run ln -sfn "$BIN_DIR/klctl" "$BIN_DIR/kabctl"
+run ln -sfn "$BIN_DIR/klctl" "$PREFIX/bin/kabctl"
 
 # Older app-launched ssh-setup runs did not export SVDIR to sv-enable. They
 # wrote the completion marker and then failed while the package's older `down`
@@ -583,10 +626,16 @@ install_command_link kabctl
 # intentional disable and must be preserved.
 SSH_SETUP_MARKER="$STATE_DIR/ssh-configured"
 SSH_DOWN_FILE="$PREFIX/var/service/sshd/down"
+SSH_AUTOSTART_MARKER="$STATE_DIR/ssh-autostart"
 if [[ -f "$SSH_SETUP_MARKER" && -f "$SSH_DOWN_FILE" && \
       "$SSH_SETUP_MARKER" -nt "$SSH_DOWN_FILE" ]] && command -v sv-enable >/dev/null 2>&1; then
   log "Repairing previously configured SSH service"
   run env SVDIR="$PREFIX/var/service" sv-enable sshd
+fi
+# Migrate the old implicit preference (enabled service with no down marker) to
+# the explicit preference used by klctl and the stack runner.
+if [[ -f "$SSH_SETUP_MARKER" && ! -f "$SSH_DOWN_FILE" && ! -f "$SSH_AUTOSTART_MARKER" ]]; then
+  run touch "$SSH_AUTOSTART_MARKER"
 fi
 
 if (( ENABLE_APP_CONTROL )); then
@@ -629,8 +678,8 @@ Next steps:
   2. Copy its pairing token; grant USB access when a printer is attached.
   3. Copy $DATA_DIR/config/bridge.conf.example to bridge.conf and fill in the token.
   4. Confirm the PTY path in $DATA_DIR/config/printer.cfg.
-  5. Run: kabctl doctor
+  5. Run: klctl doctor
   6. Start the supervised stack with: klipper-android-runner start
   7. To start it from the companion app, grant its Termux command permission
-     in Android Settings > Apps > Klipper USB Bridge > Permissions.
+     in Android Settings > Apps > Klipper For Android > Permissions.
 EOF

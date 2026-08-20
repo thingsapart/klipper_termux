@@ -17,9 +17,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -30,12 +32,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.CompoundButton
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.EditText
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.drawerlayout.widget.DrawerLayout
@@ -53,12 +57,14 @@ import dev.klipper.configurator.ui.ConfiguratorActivity
 import dev.klipper.configurator.ui.ConfiguratorHost
 import dev.klipper.configurator.ui.ConfiguratorHostRegistry
 import java.util.UUID
+import java.net.InetSocketAddress
+import java.net.Socket
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
     private lateinit var repository: DeviceRepository
     private lateinit var usbManager: UsbManager
-    private lateinit var status: TextView
-    private lateinit var serviceBadge: TextView
     private lateinit var pairing: TextView
     private lateinit var installerCommandView: TextView
     private lateinit var installerNote: TextView
@@ -68,6 +74,7 @@ class MainActivity : Activity() {
     private lateinit var setupPage: View
     private lateinit var settingsPage: View
     private lateinit var drawerLayout: DrawerLayout
+    private lateinit var appBar: View
     private lateinit var primaryToggle: ImageButton
     private lateinit var overflowButton: ImageButton
     private lateinit var webProgress: ProgressBar
@@ -94,6 +101,10 @@ class MainActivity : Activity() {
     private lateinit var statusTermuxSwitch: View
     private lateinit var statusUsbSwitch: View
     private lateinit var statusDataSwitch: View
+    private lateinit var klipperControlRow: View
+    private lateinit var sshControlRow: View
+    private lateinit var klipperToggle: Switch
+    private lateinit var sshToggle: Switch
     private var destination = Destination.DASHBOARD
     private var previousPrimary = Destination.DASHBOARD
     private var webView: WebView? = null
@@ -107,7 +118,18 @@ class MainActivity : Activity() {
     private var installerIsConfigured = false
     private var cachedLanAddress: String? = null
     private var nextLanAddressRefresh = 0L
+    private var sshRunning = false
+    private var moonrakerRunning = false
+    private var mainsailRunning = false
+    private var nextRuntimeProbe = 0L
+    private var termuxHealthCheckInFlight = false
+    private var termuxHealthCheckGeneration = 0
+    private var suppressServiceToggles = false
+    private val runtimeProbeInFlight = AtomicBoolean(false)
+    private val statusExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
+    private val hideMainsailAppBar = Runnable { setMainsailAppBarVisible(false) }
+    private var mainsailSwipeStartY: Float? = null
     private val previousBytes = mutableMapOf<UUID, Triple<Long, Long, Long>>()
     private val refresh = object : Runnable {
         override fun run() {
@@ -121,8 +143,6 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
         repository = DeviceRepository(this)
         usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        status = findViewById(R.id.service_status)
-        serviceBadge = findViewById(R.id.service_badge)
         pairing = findViewById(R.id.pairing_command)
         installerCommandView = findViewById(R.id.installer_command)
         installerNote = findViewById(R.id.installer_note)
@@ -132,6 +152,13 @@ class MainActivity : Activity() {
         setupPage = findViewById(R.id.setup_page)
         settingsPage = findViewById(R.id.settings_page)
         drawerLayout = findViewById(R.id.drawer_layout)
+        appBar = findViewById(R.id.app_bar)
+        appBar.setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN && destination == Destination.MAINSAIL) {
+                scheduleMainsailAppBarHide(APP_BAR_VISIBLE_MS)
+            }
+            false
+        }
         primaryToggle = findViewById(R.id.primary_toggle)
         overflowButton = findViewById(R.id.overflow_button)
         webProgress = findViewById(R.id.web_progress)
@@ -183,6 +210,10 @@ class MainActivity : Activity() {
         statusTermuxSwitch = findViewById(R.id.status_termux_switch)
         statusUsbSwitch = findViewById(R.id.status_usb_switch)
         statusDataSwitch = findViewById(R.id.status_data_switch)
+        klipperControlRow = findViewById(R.id.klipper_control_row)
+        sshControlRow = findViewById(R.id.ssh_control_row)
+        klipperToggle = findViewById(R.id.klipper_toggle)
+        sshToggle = findViewById(R.id.ssh_toggle)
         statusBridgeSwitch.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             if (BridgeState.serviceRunning) {
@@ -193,7 +224,8 @@ class MainActivity : Activity() {
         }
         statusTermuxSwitch.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            if (BridgeState.snapshots().isEmpty()) runTermux("start") else confirmStopStack()
+            if (moonrakerRunning || mainsailRunning || sshRunning ||
+                BridgeState.snapshots().isNotEmpty()) confirmStopStack() else requestStartEverything()
         }
         statusUsbSwitch.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -242,6 +274,9 @@ class MainActivity : Activity() {
         mdnsHostnameInput.setText(repository.mdnsHostname())
         findViewById<Button>(R.id.save_mainsail_url).setOnClickListener { saveMainsailUrl() }
         findViewById<Button>(R.id.save_mdns_hostname).setOnClickListener { saveMdnsHostname() }
+        findViewById<Button>(R.id.open_device_name_settings).setOnClickListener {
+            openAndroidDeviceNameSettings()
+        }
         networkAddressView.setOnClickListener {
             val port = Uri.parse(repository.mainsailUrl()).port.takeIf { it > 0 } ?: 80
             val address = cachedLanAddress
@@ -291,29 +326,30 @@ class MainActivity : Activity() {
             renderWizard()
         }
         findViewById<Button>(R.id.wizard_start_stack).setOnClickListener {
-            startBridge()
-            runTermux("start")
+            requestStartEverything()
         }
         findViewById<Button>(R.id.wizard_open_mainsail).setOnClickListener {
             navigate(Destination.MAINSAIL)
         }
         findViewById<Button>(R.id.retry_mainsail).setOnClickListener { loadMainsail() }
         findViewById<Button>(R.id.start_stack_from_web).setOnClickListener {
-            startBridge()
-            runTermux("start")
-            handler.postDelayed({ loadMainsail() }, 1200)
+            requestStartEverything { handler.postDelayed({ loadMainsail() }, 1200) }
         }
         findViewById<Button>(R.id.web_open_setup).setOnClickListener { navigate(Destination.SETUP) }
         findViewById<Button>(R.id.web_open_external).setOnClickListener { openExternal(repository.mainsailUrl()) }
-        findViewById<Button>(R.id.start_service).setOnClickListener { startBridge() }
-        findViewById<Button>(R.id.stop_service).setOnClickListener {
-            stopService(Intent(this, UsbBridgeService::class.java))
+        klipperToggle.setOnCheckedChangeListener { _, enabled ->
+            if (suppressServiceToggles) return@setOnCheckedChangeListener
+            if (enabled) requestStartEverything() else confirmStopStack()
+            renderServiceControls()
         }
-        findViewById<Button>(R.id.start_termux).setOnClickListener {
-            startBridge()
-            runTermux("start")
+        sshToggle.setOnCheckedChangeListener { _, enabled ->
+            if (suppressServiceToggles) return@setOnCheckedChangeListener
+            requestSshState(enabled)
         }
-        findViewById<Button>(R.id.stop_termux).setOnClickListener { runTermux("stop") }
+        findViewById<Switch>(R.id.auto_start_ssh).apply {
+            isChecked = repository.sshAutoStart()
+            setOnCheckedChangeListener { button, enabled -> updateSshAutoStart(button, enabled) }
+        }
         findViewById<Button>(R.id.regenerate_token).setOnClickListener {
             repository.regenerateToken()
             render()
@@ -322,13 +358,35 @@ class MainActivity : Activity() {
             copyToClipboard("Termux bridge config", pairing.text, "Pairing configuration copied")
         }
         val installerCommand = InstallerCommand.create(
-            BuildConfig.KAB_INSTALLER_URL,
-            BuildConfig.KAB_REPOSITORY_URL,
+            BuildConfig.K4A_INSTALLER_URL,
+            BuildConfig.K4A_REPOSITORY_URL,
         )
         installerIsConfigured = InstallerCommand.isConfigured(
-            BuildConfig.KAB_INSTALLER_URL,
-            BuildConfig.KAB_REPOSITORY_URL,
+            BuildConfig.K4A_INSTALLER_URL,
+            BuildConfig.K4A_REPOSITORY_URL,
         )
+        findViewById<Button>(R.id.update_klipper).apply {
+            isEnabled = installerIsConfigured
+            setOnClickListener {
+                val updateCommand = InstallerCommand.createUpdate(
+                    BuildConfig.K4A_INSTALLER_URL,
+                    BuildConfig.K4A_REPOSITORY_URL,
+                )
+                val result = TermuxRunner.update(this@MainActivity, updateCommand)
+                handleTermuxResult(result, "Klipper update started — opening Termux")
+                if (result == TermuxRunner.Result.SENT) {
+                    handler.postDelayed({
+                        if (!TermuxRunner.openApp(this@MainActivity)) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Open Termux to view the update",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }, 400)
+                }
+            }
+        }
         installerCommandView.text = installerCommand
         installerCommandView.setOnClickListener {
             copyToClipboard("Termux installer", installerCommand, "Installer command copied")
@@ -379,17 +437,23 @@ class MainActivity : Activity() {
             ?.let { runCatching { Destination.valueOf(it) }.getOrNull() }
             ?.takeIf { it != Destination.SETUP && it != Destination.SETTINGS }
             ?: Destination.DASHBOARD
+        startBridge()
         navigate(destination, rememberPrimary = false)
     }
 
     override fun onResume() {
         super.onResume()
         webView?.onResume()
+        nextRuntimeProbe = 0L
         handler.post(refresh)
+        if (destination == Destination.MAINSAIL && appBar.visibility == View.VISIBLE) {
+            scheduleMainsailAppBarHide(INITIAL_APP_BAR_DELAY_MS)
+        }
     }
 
     override fun onPause() {
         handler.removeCallbacks(refresh)
+        handler.removeCallbacks(hideMainsailAppBar)
         webView?.onPause()
         super.onPause()
     }
@@ -404,12 +468,14 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(hideMainsailAppBar)
         webView?.let {
             mainsailContainer.removeView(it)
             it.stopLoading()
             it.destroy()
         }
         webView = null
+        statusExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -436,6 +502,183 @@ class MainActivity : Activity() {
 
     private fun runTermux(command: String) {
         handleTermuxResult(TermuxRunner.invoke(this, command), "Termux stack command sent: $command")
+        nextRuntimeProbe = 0L
+    }
+
+    private fun updateSshAutoStart(button: CompoundButton, enabled: Boolean) {
+        button.isEnabled = false
+        val result = TermuxRunner.setSshAutoStart(this, enabled) { command ->
+            button.isEnabled = true
+            if (command.succeeded) {
+                repository.setSshAutoStart(enabled)
+                Toast.makeText(
+                    this,
+                    if (enabled) "SSH auto-start enabled" else "SSH auto-start disabled",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                restoreSshAutoStartSwitch(button, !enabled)
+                showTermuxCommandFailure(command)
+            }
+            requestRuntimeProbe()
+        }
+        if (result != TermuxRunner.Result.SENT) {
+            button.isEnabled = true
+            restoreSshAutoStartSwitch(button, !enabled)
+            handleTermuxResult(result, "")
+        }
+    }
+
+    private fun restoreSshAutoStartSwitch(button: CompoundButton, enabled: Boolean) {
+        button.setOnCheckedChangeListener(null)
+        button.isChecked = enabled
+        button.setOnCheckedChangeListener { _, checked -> updateSshAutoStart(button, checked) }
+    }
+
+    private fun requestSshState(enabled: Boolean) {
+        sshToggle.isEnabled = false
+        val callback: (TermuxRunner.CommandResult) -> Unit = { command ->
+            sshToggle.isEnabled = true
+            if (command.succeeded) {
+                Toast.makeText(
+                    this,
+                    if (enabled) "SSH started" else "SSH stopped",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                showTermuxCommandFailure(command)
+            }
+            requestRuntimeProbe()
+        }
+        val result = if (enabled) {
+            TermuxRunner.startSsh(this, repository.sshAutoStart(), callback)
+        } else {
+            TermuxRunner.stopSsh(this, callback)
+        }
+        if (result != TermuxRunner.Result.SENT) {
+            sshToggle.isEnabled = true
+            if (result == TermuxRunner.Result.TERMUX_UNAVAILABLE) {
+                showStartTermuxForSshPrompt(enabled)
+            } else {
+                handleTermuxResult(result, "")
+            }
+            requestRuntimeProbe()
+        }
+    }
+
+    private fun requestRuntimeProbe() {
+        nextRuntimeProbe = 0L
+        refreshRuntimeStatus(System.currentTimeMillis(), force = true)
+        handler.postDelayed({
+            nextRuntimeProbe = 0L
+            refreshRuntimeStatus(System.currentTimeMillis(), force = true)
+        }, 500)
+    }
+
+    private fun showTermuxCommandFailure(command: TermuxRunner.CommandResult) {
+        val detail = command.stderr.ifBlank { command.errorMessage }.trim()
+        val outdated = detail.contains("klctl") &&
+            (detail.contains("No such file") || detail.contains("not found"))
+        val message = if (outdated) {
+            "K4A tools are out of date. Use Update Klipper in Settings."
+        } else {
+            detail.ifBlank { "Termux command failed (exit ${command.exitCode})" }
+        }
+        Toast.makeText(this, message.take(240), Toast.LENGTH_LONG).show()
+    }
+
+    private fun requestStartEverything(afterStart: () -> Unit = {}) {
+        if (!TermuxRunner.isInstalled(this)) {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.termux_required_title)
+                .setMessage(R.string.termux_required_description)
+                .setPositiveButton(R.string.open_setup) { _, _ -> navigate(Destination.SETUP) }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return
+        }
+        val termuxDetected = moonrakerRunning || mainsailRunning || sshRunning ||
+            BridgeState.snapshots().isNotEmpty()
+        if (termuxDetected) {
+            startEverything(afterStart)
+            return
+        }
+        checkTermuxCommandChannel(afterStart)
+    }
+
+    private fun checkTermuxCommandChannel(afterStart: () -> Unit) {
+        if (termuxHealthCheckInFlight) {
+            Toast.makeText(this, "Checking Termux…", Toast.LENGTH_SHORT).show()
+            return
+        }
+        termuxHealthCheckInFlight = true
+        val generation = ++termuxHealthCheckGeneration
+        val dispatchResult = TermuxRunner.healthCheck(this) { commandResult ->
+            if (generation != termuxHealthCheckGeneration) return@healthCheck
+            termuxHealthCheckInFlight = false
+            if (commandResult.healthCheckSucceeded) {
+                startEverything(afterStart)
+            } else {
+                showStartTermuxPrompt(afterStart)
+            }
+        }
+        if (dispatchResult != TermuxRunner.Result.SENT) {
+            termuxHealthCheckInFlight = false
+            if (dispatchResult == TermuxRunner.Result.TERMUX_UNAVAILABLE) {
+                showStartTermuxPrompt(afterStart)
+            } else {
+                handleTermuxResult(dispatchResult, "Termux is available")
+            }
+            return
+        }
+        Toast.makeText(this, "Checking Termux…", Toast.LENGTH_SHORT).show()
+        handler.postDelayed({
+            if (generation == termuxHealthCheckGeneration && termuxHealthCheckInFlight) {
+                termuxHealthCheckInFlight = false
+                termuxHealthCheckGeneration++
+                showStartTermuxPrompt(afterStart)
+            }
+        }, 3_000)
+    }
+
+    private fun showStartTermuxPrompt(afterStart: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.start_termux_title)
+            .setMessage(R.string.start_termux_description)
+            .setPositiveButton(R.string.start_termux_action) { _, _ ->
+                startEverything(afterStart, bringTermuxForward = true)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showStartTermuxForSshPrompt(enabled: Boolean) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.start_termux_ssh_title)
+            .setMessage(R.string.start_termux_ssh_description)
+            .setPositiveButton(R.string.start_termux_action) { _, _ ->
+                if (!TermuxRunner.openApp(this)) {
+                    Toast.makeText(this, "Unable to open Termux", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                handler.postDelayed({
+                    requestSshState(enabled)
+                }, 400)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun startEverything(
+        afterStart: () -> Unit = {},
+        bringTermuxForward: Boolean = false,
+    ) {
+        startBridge()
+        if (bringTermuxForward) TermuxRunner.openApp(this)
+        handler.postDelayed({
+            runTermux("start")
+            afterStart()
+        }, if (bringTermuxForward) 400L else 0L)
     }
 
     private fun handleTermuxResult(result: TermuxRunner.Result, sentMessage: String) {
@@ -502,6 +745,7 @@ class MainActivity : Activity() {
         val result = TermuxRunner.setupSsh(this)
         if (result == TermuxRunner.Result.SENT) {
             repository.markSshSetupHandled()
+            repository.setSshAutoStart(true)
             handleTermuxResult(result, "SSH setup started — opening Termux")
             handler.postDelayed({
                 if (!TermuxRunner.openApp(this)) {
@@ -644,6 +888,12 @@ class MainActivity : Activity() {
         drawerDashboard.isSelected = selected == Destination.DASHBOARD
         drawerMainsail.isSelected = selected == Destination.MAINSAIL
         drawerSettings.isSelected = selected == Destination.SETTINGS || selected == Destination.SETUP
+        if (selected == Destination.MAINSAIL) {
+            scheduleMainsailAppBarHide(INITIAL_APP_BAR_DELAY_MS)
+        } else {
+            handler.removeCallbacks(hideMainsailAppBar)
+            setMainsailAppBarVisible(true, animate = false)
+        }
         if (selected == Destination.SETUP) renderWizard()
     }
 
@@ -692,6 +942,27 @@ class MainActivity : Activity() {
             .onFailure {
                 mdnsHostnameInput.error = it.message ?: "Invalid hostname"
             }
+    }
+
+    private fun openAndroidDeviceNameSettings() {
+        val actions = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+                // Some Android builds expose this screen without publishing an SDK constant.
+                add("android.settings.DEVICE_NAME_SETTINGS")
+            }
+            add(Settings.ACTION_DEVICE_INFO_SETTINGS)
+            add(Settings.ACTION_SETTINGS)
+        }
+        val opened = actions.any { action ->
+            runCatching { startActivity(Intent(action)) }.isSuccess
+        }
+        if (!opened) {
+            Toast.makeText(
+                this,
+                R.string.device_name_settings_unavailable,
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     private fun saveTermuxLinks() {
@@ -795,6 +1066,10 @@ class MainActivity : Activity() {
                 }
             }
             setDownloadListener { url, _, _, _, _ -> openExternal(url) }
+            setOnTouchListener { _, event ->
+                handleMainsailSwipe(event)
+                false
+            }
         }
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         mainsailContainer.addView(
@@ -809,6 +1084,67 @@ class MainActivity : Activity() {
         pendingWebState = null
         if (!restored) view.loadUrl(repository.mainsailUrl())
         return view
+    }
+
+    private fun handleMainsailSwipe(event: MotionEvent) {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                mainsailSwipeStartY = event.y.takeIf {
+                    it <= dp(APP_BAR_REVEAL_EDGE_DP).toFloat()
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val start = mainsailSwipeStartY ?: return
+                if (event.y - start >= dp(APP_BAR_REVEAL_DISTANCE_DP)) {
+                    mainsailSwipeStartY = null
+                    setMainsailAppBarVisible(true)
+                    scheduleMainsailAppBarHide(APP_BAR_VISIBLE_MS)
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> mainsailSwipeStartY = null
+        }
+    }
+
+    private fun scheduleMainsailAppBarHide(delayMillis: Long) {
+        handler.removeCallbacks(hideMainsailAppBar)
+        handler.postDelayed(hideMainsailAppBar, delayMillis)
+    }
+
+    private fun setMainsailAppBarVisible(visible: Boolean, animate: Boolean = true) {
+        appBar.animate().cancel()
+        if (visible) {
+            if (appBar.visibility == View.VISIBLE && appBar.alpha == 1f) return
+            appBar.visibility = View.VISIBLE
+            if (!animate) {
+                appBar.translationY = 0f
+                appBar.alpha = 1f
+                return
+            }
+            appBar.translationY = -appBar.height.toFloat().coerceAtLeast(dp(60).toFloat())
+            appBar.alpha = 0f
+            appBar.animate()
+                .translationY(0f)
+                .alpha(1f)
+                .setDuration(APP_BAR_ANIMATION_MS)
+                .start()
+            return
+        }
+        if (destination != Destination.MAINSAIL || appBar.visibility != View.VISIBLE) return
+        if (!animate) {
+            appBar.visibility = View.GONE
+            appBar.translationY = 0f
+            appBar.alpha = 0f
+            return
+        }
+        appBar.animate()
+            .translationY(-appBar.height.toFloat())
+            .alpha(0f)
+            .setDuration(APP_BAR_ANIMATION_MS)
+            .withEndAction {
+                if (destination == Destination.MAINSAIL) appBar.visibility = View.GONE
+                appBar.translationY = 0f
+            }
+            .start()
     }
 
     private fun loadMainsail() {
@@ -840,9 +1176,9 @@ class MainActivity : Activity() {
 
     private fun confirmStopStack() {
         AlertDialog.Builder(this)
-            .setTitle("Stop Klipper stack?")
+            .setTitle("Stop Klipper?")
             .setMessage("This can interrupt an active print. The Android USB bridge will remain available.")
-            .setPositiveButton("Stop stack") { _, _ -> runTermux("stop") }
+            .setPositiveButton("Stop") { _, _ -> runTermux("stop") }
             .setNegativeButton("Cancel", null)
             .show()
     }
@@ -868,6 +1204,8 @@ class MainActivity : Activity() {
         val rawUsbCount = usbManager.deviceList.size
         renderWizard()
         val now = System.currentTimeMillis()
+        refreshRuntimeStatus(now)
+        renderServiceControls()
         if (now >= nextLanAddressRefresh) {
             cachedLanAddress = NetworkAddress.currentIpv4()
             nextLanAddressRefresh = now + 5_000
@@ -879,6 +1217,7 @@ class MainActivity : Activity() {
             append("\nmDNS  ·  http://${repository.mdnsHostname()}.local:$webPort/")
         }
         val dataActive = snapshots.values.any { now - it.lastActivityMillis < 1500 }
+        val termuxDetected = moonrakerRunning || mainsailRunning || sshRunning || snapshots.isNotEmpty()
         statusBridgeSwitch.setBackgroundResource(
             when {
                 BridgeState.listenerError != null -> R.drawable.pb86_switch_amber
@@ -887,14 +1226,14 @@ class MainActivity : Activity() {
             },
         )
         statusTermuxSwitch.setBackgroundResource(
-            if (snapshots.isEmpty()) R.drawable.pb86_switch_off else R.drawable.pb86_switch_green,
+            if (termuxDetected) R.drawable.pb86_switch_green else R.drawable.pb86_switch_off,
         )
         updateSummary(
             summaryBridgeDot,
             summaryBridgeState,
             when {
                 BridgeState.listenerError != null -> "Error"
-                BridgeState.serviceRunning -> "Running"
+                BridgeState.serviceRunning -> "Running (${snapshots.size})"
                 else -> "Stopped"
             },
             when {
@@ -906,8 +1245,8 @@ class MainActivity : Activity() {
         updateSummary(
             summaryTermuxDot,
             summaryTermuxState,
-            if (snapshots.isEmpty()) "Waiting" else "${snapshots.size} link${if (snapshots.size == 1) "" else "s"}",
-            if (snapshots.isEmpty()) R.color.mainsail_text_muted else R.color.mainsail_success,
+            if (termuxDetected) "Running" else "Waiting",
+            if (termuxDetected) R.color.mainsail_success else R.color.mainsail_text_muted,
         )
         val usbPorts = drivers.sumOf { it.ports.size }
         val usbPermission = drivers.any { usbManager.hasPermission(it.device) }
@@ -944,23 +1283,6 @@ class MainActivity : Activity() {
             if (dataActive) "Active" else "Idle",
             if (dataActive) R.color.mainsail_primary else R.color.mainsail_text_muted,
         )
-        serviceBadge.apply {
-            text = if (BridgeState.serviceRunning) "RUNNING" else "STOPPED"
-            setTextColor(getColor(
-                if (BridgeState.serviceRunning) R.color.mainsail_success
-                else R.color.mainsail_text_secondary,
-            ))
-            setBackgroundResource(
-                if (BridgeState.serviceRunning) R.drawable.bg_status_chip
-                else R.drawable.bg_status_chip_off,
-            )
-        }
-        status.text = buildString {
-            append("Loopback listener  127.0.0.1:${repository.port()}")
-            BridgeState.listenerError?.let { append("\nListener error: $it") }
-            BridgeState.lastUsbError?.let { append("\nLast USB error: $it") }
-            append("\n${snapshots.size} active Termux connection(s)")
-        }
         pairing.text = getString(R.string.pairing_value, repository.token().toHex(), repository.port())
         devices.removeAllViews()
         if (drivers.isEmpty()) {
@@ -1106,6 +1428,46 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun renderServiceControls() {
+        val klipperRunning = moonrakerRunning || BridgeState.snapshots().isNotEmpty()
+        suppressServiceToggles = true
+        klipperToggle.isChecked = klipperRunning
+        sshToggle.isChecked = sshRunning
+        suppressServiceToggles = false
+        klipperControlRow.setBackgroundResource(
+            if (klipperRunning) R.drawable.bg_service_running else R.drawable.bg_service_stopped,
+        )
+        sshControlRow.setBackgroundResource(
+            if (sshRunning) R.drawable.bg_service_running else R.drawable.bg_service_stopped,
+        )
+    }
+
+    private fun refreshRuntimeStatus(now: Long, force: Boolean = false) {
+        if ((!force && now < nextRuntimeProbe) ||
+            !runtimeProbeInFlight.compareAndSet(false, true)) return
+        nextRuntimeProbe = now + 1_000
+        statusExecutor.execute {
+            val moonraker = isLocalPortOpen(7125)
+            val webPort = Uri.parse(repository.mainsailUrl()).port.takeIf { it > 0 } ?: 8080
+            val mainsail = isLocalPortOpen(webPort)
+            val ssh = isLocalPortOpen(2020)
+            handler.post {
+                moonrakerRunning = moonraker
+                mainsailRunning = mainsail
+                sshRunning = ssh
+                runtimeProbeInFlight.set(false)
+                renderServiceControls()
+            }
+        }
+    }
+
+    private fun isLocalPortOpen(port: Int): Boolean = runCatching {
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", port), 250)
+        }
+        true
+    }.getOrDefault(false)
+
     private fun updateSummary(dot: TextView, state: TextView, value: String, color: Int) {
         dot.setTextColor(getColor(color))
         state.text = value
@@ -1177,5 +1539,10 @@ class MainActivity : Activity() {
         private const val MENU_SETUP = 1
         private const val MENU_RELOAD = 2
         private const val MENU_BROWSER = 3
+        private const val INITIAL_APP_BAR_DELAY_MS = 500L
+        private const val APP_BAR_VISIBLE_MS = 10_000L
+        private const val APP_BAR_ANIMATION_MS = 220L
+        private const val APP_BAR_REVEAL_EDGE_DP = 48
+        private const val APP_BAR_REVEAL_DISTANCE_DP = 44
     }
 }

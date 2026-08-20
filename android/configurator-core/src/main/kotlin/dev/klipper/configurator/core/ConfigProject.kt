@@ -1,16 +1,16 @@
 package dev.klipper.configurator.core
 
-enum class DeploymentTarget(val label: String) { KAB_TERMUX("Klipper Android Bridge / Termux"), STANDARD_LINUX("Standard Klipper / Moonraker") }
+enum class DeploymentTarget(val label: String) { K4A_TERMUX("K4A / Termux"), STANDARD_LINUX("Standard Klipper / Moonraker") }
 enum class Kinematics(val configValue: String, val label: String) { CARTESIAN("cartesian", "Cartesian / bedslinger"), COREXY("corexy", "CoreXY"), COREXZ("corexz", "CoreXZ"), DELTA("delta", "Delta") }
 enum class DriverKind(val section: String?, val label: String) { STANDALONE(null, "Standalone / legacy"), TMC2209("tmc2209", "TMC2209 UART"), TMC2240("tmc2240", "TMC2240 SPI"), TMC5160("tmc5160", "TMC5160 SPI") }
 enum class ProbeKind(val label: String) { NONE("No probe / Z switch"), FIXED("Fixed inductive/capacitive"), BLTOUCH("BLTouch / CR Touch"), KLICKY("Klicky / Euclid detachable"), TAP("Voron Tap / nozzle switch"), BEACON("Beacon"), CARTOGRAPHER("Cartographer"), BTT_EDDY("BTT Eddy") }
 
 data class ConfigProject(
     val schemaVersion: Int = CURRENT_SCHEMA, val name: String = "My Klipper Printer",
-    val target: DeploymentTarget = DeploymentTarget.KAB_TERMUX, val mechanicsProfile: String = "Custom",
+    val target: DeploymentTarget = DeploymentTarget.K4A_TERMUX, val mechanicsProfile: String = "Custom",
     val kinematics: Kinematics = Kinematics.CARTESIAN, val bedWidth: Int = 220, val bedDepth: Int = 220,
     val buildHeight: Int = 250, val zMotorCount: Int = 1, val controllerId: String = "btt-skr-mini-e3-v3",
-    val mcuSerial: String = KAB_SERIAL, val xyDriver: DriverKind = DriverKind.TMC2209,
+    val mcuSerial: String = K4A_SERIAL, val xyDriver: DriverKind = DriverKind.TMC2209,
     val zDriver: DriverKind = DriverKind.TMC2209, val extruderDriver: DriverKind = DriverKind.TMC2209,
     val probe: ProbeKind = ProbeKind.NONE, val bedMesh: Boolean = false, val adaptiveMesh: Boolean = false,
     val inputShaper: Boolean = false, val filamentSensor: Boolean = false,
@@ -23,7 +23,7 @@ data class ConfigProject(
     val pinOverrides: Map<String, String> = emptyMap(),
     val selectedPlugins: Set<String> = emptySet(),
 ) {
-    companion object { const val CURRENT_SCHEMA = 1; const val KAB_SERIAL = "/data/data/com.termux/files/usr/var/run/klipper-android/main"; const val LINUX_SERIAL = "/dev/serial/by-id/CHANGE_ME" }
+    companion object { const val CURRENT_SCHEMA = 1; const val K4A_SERIAL = "/data/data/com.termux/files/usr/var/run/klipper-android/main"; const val LINUX_SERIAL = "/dev/serial/by-id/CHANGE_ME" }
 }
 
 data class ControllerBoard(val id: String, val name: String, val exactRevision: String, val pins: Map<String, String>, val uartAddresses: Map<String, Int> = emptyMap())

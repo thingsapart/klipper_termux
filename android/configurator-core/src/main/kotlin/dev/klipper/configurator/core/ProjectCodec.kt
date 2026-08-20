@@ -34,9 +34,9 @@ object ProjectCodec {
             val at = item.indexOf('='); if (at <= 0) null else item.substring(0, at) to item.substring(at + 1)
         }.toMap()
         return ConfigProject(schemaVersion = i("schemaVersion", 1), name = p.getProperty("name", "Imported Klipper Printer"),
-            target = e("target", DeploymentTarget.KAB_TERMUX, DeploymentTarget.entries.toTypedArray()), mechanicsProfile = p.getProperty("mechanicsProfile", "Custom"),
+            target = e("target", DeploymentTarget.K4A_TERMUX, DeploymentTarget.entries.toTypedArray()), mechanicsProfile = p.getProperty("mechanicsProfile", "Custom"),
             kinematics = e("kinematics", Kinematics.CARTESIAN, Kinematics.entries.toTypedArray()), bedWidth = i("bedWidth", 220), bedDepth = i("bedDepth", 220),
-            buildHeight = i("buildHeight", 250), zMotorCount = i("zMotorCount", 1), controllerId = p.getProperty("controllerId", "generic"), mcuSerial = p.getProperty("mcuSerial", ConfigProject.KAB_SERIAL),
+            buildHeight = i("buildHeight", 250), zMotorCount = i("zMotorCount", 1), controllerId = p.getProperty("controllerId", "generic"), mcuSerial = p.getProperty("mcuSerial", ConfigProject.K4A_SERIAL),
             xyDriver = e("xyDriver", DriverKind.TMC2209, DriverKind.entries.toTypedArray()), zDriver = e("zDriver", DriverKind.TMC2209, DriverKind.entries.toTypedArray()),
             extruderDriver = e("extruderDriver", DriverKind.TMC2209, DriverKind.entries.toTypedArray()), probe = e("probe", ProbeKind.NONE, ProbeKind.entries.toTypedArray()),
             bedMesh = b("bedMesh", false), adaptiveMesh = b("adaptiveMesh", false), inputShaper = b("inputShaper", false), filamentSensor = b("filamentSensor", false),

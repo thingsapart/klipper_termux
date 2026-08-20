@@ -5,7 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUTPUT="${1:-$ROOT/klipper-android-bridge}"
 CC_BIN="${CC:-clang}"
 PLATFORM_DEFINES=(-D_GNU_SOURCE)
-[[ "$(uname -s)" == Darwin ]] && PLATFORM_DEFINES+=(-DKAB_APPLE=1)
+[[ "$(uname -s)" == Darwin ]] && PLATFORM_DEFINES+=(-DK4A_APPLE=1)
 
 "$CC_BIN" -std=c11 -O2 -DNDEBUG "${PLATFORM_DEFINES[@]}" \
   -Wall -Wextra -Wpedantic \

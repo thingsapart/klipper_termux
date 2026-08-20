@@ -8,9 +8,9 @@ class ConfigGeneratorTest {
     @Test fun `default project produces managed config tree`() {
         val bundle = ConfigGenerator.generate(ConfigProject())
         assertTrue("printer.cfg" in bundle.files)
-        assertTrue("kab/current.cfg" in bundle.files)
-        assertTrue("kab/revisions/generated/20-motion.cfg" in bundle.files)
-        assertTrue(bundle.files.getValue("printer.cfg").decodeToString().contains("[include kab/current.cfg]"))
+        assertTrue("k4a/current.cfg" in bundle.files)
+        assertTrue("k4a/revisions/generated/20-motion.cfg" in bundle.files)
+        assertTrue(bundle.files.getValue("printer.cfg").decodeToString().contains("[include k4a/current.cfg]"))
         assertTrue("20-missing.cfg" !in bundle.files)
     }
 
@@ -27,7 +27,7 @@ class ConfigGeneratorTest {
     @Test fun `generic controller is visibly incomplete`() {
         val bundle = ConfigGenerator.generate(ConfigProject(controllerId = "generic"))
         assertTrue(bundle.issues.any { it.field == "controller" && it.severity == Severity.WARNING })
-        assertTrue(bundle.files.getValue("kab/revisions/generated/20-motion.cfg").decodeToString().contains("CHANGE_ME_X_STEP"))
+        assertTrue(bundle.files.getValue("k4a/revisions/generated/20-motion.cfg").decodeToString().contains("CHANGE_ME_X_STEP"))
     }
 
     @Test fun `advanced values and pin overrides survive zip round trip`() {
@@ -35,10 +35,10 @@ class ConfigGeneratorTest {
             hotendSensor = "ATC Semitec 104GT-2", probeXOffset = -22.5,
             pinOverrides = mapOf("x_step" to "PA5", "probe" to "^PB7"))
         val bundle = ConfigGenerator.generate(expected)
-        val motion = bundle.files.getValue("kab/revisions/generated/20-motion.cfg").decodeToString()
+        val motion = bundle.files.getValue("k4a/revisions/generated/20-motion.cfg").decodeToString()
         assertTrue(motion.contains("step_pin: PA5"))
         assertTrue(motion.contains("max_velocity: 350"))
-        assertTrue("kab/revisions/generated/80-plugins.cfg" !in bundle.files)
+        assertTrue("k4a/revisions/generated/80-plugins.cfg" !in bundle.files)
         assertEquals(expected, ConfigGenerator.importProject(ConfigGenerator.zip(bundle)))
     }
 }
