@@ -11,7 +11,7 @@ class InstallerCommandTest {
             "https://example.test/install.sh",
             "https://example.test/repo.git",
         )
-        assertTrue(command.contains("pkg install -y curl >/dev/null"))
+        assertTrue(command.contains("pkg install -y curl >/dev/null 2>&1"))
         assertTrue(command.contains("k4a_refresh='\"\$(date +%s)\""))
         assertTrue(command.contains("Cache-Control: no-cache"))
         assertTrue(command.contains("K4A_REPOSITORY='https://example.test/repo.git'"))

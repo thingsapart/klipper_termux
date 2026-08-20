@@ -20,7 +20,13 @@ INSTALL_STEP=0
 UI_ACCENT=""
 UI_MUTED=""
 UI_SUCCESS=""
+UI_ERROR=""
 UI_RESET=""
+UI_INTERACTIVE=0
+UI_READY=0
+UI_STATUS_TEXT=""
+UI_SPINNER=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏' )
+INITIAL_STATUS=""
 
 usage() {
   cat <<'EOF'
@@ -40,18 +46,34 @@ Usage: install.sh [options]
 EOF
 }
 
-die() { printf '%serror:%s %s\n' "$UI_SUCCESS" "$UI_RESET" "$*" >&2; exit 1; }
+die() { printf '%serror:%s %s\n' "$UI_ERROR" "$UI_RESET" "$*" >&2; exit 1; }
 log() {
   INSTALL_STEP=$((INSTALL_STEP + 1))
-  printf '\n%s[%02d]%s %s%s%s\n' \
-    "$UI_ACCENT" "$INSTALL_STEP" "$UI_RESET" "$UI_MUTED" "$*" "$UI_RESET"
+  UI_STATUS_TEXT="$*"
+  if (( UI_INTERACTIVE && UI_READY )); then
+    printf '\r\033[2K%s[%02d]%s %s%s…%s' \
+      "$UI_ACCENT" "$INSTALL_STEP" "$UI_RESET" "$UI_MUTED" "$*" "$UI_RESET" >&3
+  else
+    printf '\n%s[%02d]%s %s%s%s\n' \
+      "$UI_ACCENT" "$INSTALL_STEP" "$UI_RESET" "$UI_MUTED" "$*" "$UI_RESET"
+  fi
+}
+complete_step() {
+  INSTALL_STEP=$((INSTALL_STEP + 1))
+  if (( UI_INTERACTIVE && UI_READY )); then
+    printf '\r\033[2K%s[%02d] ✓ %s%s\n' \
+      "$UI_SUCCESS" "$INSTALL_STEP" "$*" "$UI_RESET" >&3
+  else
+    printf '\n%s[%02d] [ok]%s %s\n' \
+      "$UI_SUCCESS" "$INSTALL_STEP" "$UI_RESET" "$*"
+  fi
 }
 run() {
   if (( DRY_RUN )); then printf '+ '; printf '%q ' "$@"; printf '\n';
   else "$@"; fi
 }
 run_quiet() {
-  local label="$1" status
+  local label="$1" status command_pid frame=0
   shift
   if (( DRY_RUN )); then
     printf '+ '; printf '%q ' "$@"; printf '\n'
@@ -60,10 +82,34 @@ run_quiet() {
   printf '\n[%s] ' "$label" >>"$INSTALL_LOG"
   printf '%q ' "$@" >>"$INSTALL_LOG"
   printf '\n' >>"$INSTALL_LOG"
-  if "$@" >>"$INSTALL_LOG" 2>&1; then return 0; fi
-  status=$?
+  if (( UI_INTERACTIVE )); then
+    "$@" >>"$INSTALL_LOG" 2>&1 &
+    command_pid=$!
+    while kill -0 "$command_pid" 2>/dev/null; do
+      printf '\r\033[2K%s[%02d]%s %s%s%s %s…%s' \
+        "$UI_ACCENT" "$INSTALL_STEP" "$UI_RESET" "$UI_ACCENT" \
+        "${UI_SPINNER[frame % ${#UI_SPINNER[@]}]}" "$UI_MUTED" "$label" "$UI_RESET" >&3
+      frame=$((frame + 1))
+      sleep 0.12
+    done
+    if wait "$command_pid"; then
+      printf '\r\033[2K%s[%02d] ✓%s %s%s%s' \
+        "$UI_SUCCESS" "$INSTALL_STEP" "$UI_RESET" "$UI_MUTED" "$label" "$UI_RESET" >&3
+      return 0
+    else
+      status=$?
+    fi
+  elif "$@" >>"$INSTALL_LOG" 2>&1; then
+    return 0
+  else
+    status=$?
+  fi
+  if (( UI_INTERACTIVE )); then
+    printf '\r\033[2K%s[%02d] ✗ %s%s\n' \
+      "$UI_ERROR" "$INSTALL_STEP" "$label" "$UI_RESET" >&3
+  fi
   printf '\n%s%s failed (exit %d). Recent command output follows:%s\n' \
-    "$UI_SUCCESS" "$label" "$status" "$UI_RESET" >&2
+    "$UI_ERROR" "$label" "$status" "$UI_RESET" >&2
   tail -n 80 "$INSTALL_LOG" >&2 || true
   die "$label failed; full output is in $INSTALL_LOG"
 }
@@ -224,7 +270,7 @@ if has_existing_installation; then
   if (( REINSTALL )); then
     purge_existing_installation
   else
-    log "Updating managed software; printer data and configuration will be preserved"
+    INITIAL_STATUS="Updating managed software; printer data and configuration will be preserved"
   fi
 fi
 
@@ -254,13 +300,16 @@ start_installer_logging() {
   if [[ -f "$INSTALL_LOG" ]] && (( $(wc -c <"$INSTALL_LOG") > 1048576 )); then
     mv -f "$INSTALL_LOG" "$INSTALL_LOG.previous"
   fi
-  exec > >(tee -a "$INSTALL_LOG") 2>&1
   if [[ -t 1 ]]; then
+    UI_INTERACTIVE=1
+    exec 3>&1
     UI_ACCENT=$'\033[1;36m'
     UI_MUTED=$'\033[0;37m'
-    UI_SUCCESS=$'\033[1;31m'
+    UI_SUCCESS=$'\033[1;32m'
+    UI_ERROR=$'\033[1;31m'
     UI_RESET=$'\033[0m'
   fi
+  exec > >(tee -a "$INSTALL_LOG") 2>&1
   printf '\n%s┌──────────────────────────────┐%s\n' "$UI_ACCENT" "$UI_RESET"
   printf '%s│  Klipper // Android  setup   │%s\n' "$UI_ACCENT" "$UI_RESET"
   printf '%s└──────────────────────────────┘%s\n' "$UI_ACCENT" "$UI_RESET"
@@ -269,12 +318,14 @@ start_installer_logging() {
     "$UI_MUTED" "$UI_RESET" "$CHANNEL"
   printf '%sDetailed command output is saved to:%s %s\n' \
     "$UI_MUTED" "$UI_RESET" "$INSTALL_LOG"
-  printf '\n===== installer started %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  trap 'status=$?; printf "===== installer finished %s (status %d) =====\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"' EXIT
-  trap 'status=$?; printf "ERROR: installer command failed near line %d (status %d)\n" "${BASH_LINENO[0]:-${LINENO}}" "$status" >&2' ERR
+  printf '\n===== installer started %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$INSTALL_LOG"
+  trap 'status=$?; printf "===== installer finished %s (status %d) =====\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status" >>"$INSTALL_LOG"' EXIT
+  trap 'status=$?; printf "ERROR: installer command failed near line %d (status %d)\n" "${BASH_LINENO[0]:-${LINENO}}" "$status" >>"$INSTALL_LOG"' ERR
+  UI_READY=1
 }
 
 start_installer_logging
+[[ -z "$INITIAL_STATUS" ]] || log "$INITIAL_STATUS"
 if (( UPDATE )) && [[ -f "$STATE_DIR/restart-after-update" ]]; then
   RESTART_AFTER_UPDATE=1
 fi
@@ -603,7 +654,8 @@ if (( INSTALL_UI )); then
   if (( INSTALL_MAINSAIL )); then
     log "Installing Mainsail $MAINSAIL_VERSION"
     run rm -f -- "$MAINSAIL_ARCHIVE.part"
-    run curl -fL --retry 3 --retry-delay 2 --progress-bar "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE.part"
+    run_quiet "Mainsail download" \
+      curl -fL --retry 3 --retry-delay 2 "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE.part"
     run mv -f -- "$MAINSAIL_ARCHIVE.part" "$MAINSAIL_ARCHIVE"
     if [[ "$CHANNEL" == stable && -n "$MAINSAIL_SHA256" ]]; then
       if (( DRY_RUN )); then
@@ -723,11 +775,11 @@ fi
 
 if (( UPDATE && RESTART_AFTER_UPDATE )); then
   log "Restarting the updated stack"
-  run "$BIN_DIR/klipper-android-runner" start
+  run_quiet "Managed stack restart" "$BIN_DIR/klipper-android-runner" start
 fi
 if (( ! DRY_RUN )); then rm -f -- "$STATE_DIR/restart-after-update"; fi
 
-log "Installation complete"
+complete_step "Installation complete"
 cat <<EOF
 Next steps:
   1. Install and start the Android companion app.

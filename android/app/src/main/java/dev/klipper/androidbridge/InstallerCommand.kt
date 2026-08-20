@@ -23,7 +23,7 @@ object InstallerCommand {
         // GitHub's mutable raw branch URL can be served from a stale CDN cache.
         // Give every user-initiated run a fresh URL and execute the downloaded
         // file rather than a pipe, so the fetched installer is unambiguous.
-        return "pkg install -y curl >/dev/null && " +
+        return "pkg install -y curl >/dev/null 2>&1 && " +
             "installer=${'$'}(mktemp) && trap 'rm -f -- \"${'$'}installer\"' EXIT && " +
             "curl -fsSL --retry 3 --retry-delay 1 -H 'Cache-Control: no-cache' " +
             "${shellQuote(cacheBustedUrl)}\"${'$'}(date +%s)\" -o \"${'$'}installer\" && " +
