@@ -16,6 +16,11 @@ WEB_PORT=8080
 RESTART_AFTER_UPDATE=0
 UPDATE_SERVICES_STOPPED=0
 INSTALL_LOG=""
+INSTALL_STEP=0
+UI_ACCENT=""
+UI_MUTED=""
+UI_SUCCESS=""
+UI_RESET=""
 
 usage() {
   cat <<'EOF'
@@ -35,11 +40,32 @@ Usage: install.sh [options]
 EOF
 }
 
-die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-log() { printf '\n==> %s\n' "$*"; }
+die() { printf '%serror:%s %s\n' "$UI_SUCCESS" "$UI_RESET" "$*" >&2; exit 1; }
+log() {
+  INSTALL_STEP=$((INSTALL_STEP + 1))
+  printf '\n%s[%02d]%s %s%s%s\n' \
+    "$UI_ACCENT" "$INSTALL_STEP" "$UI_RESET" "$UI_MUTED" "$*" "$UI_RESET"
+}
 run() {
   if (( DRY_RUN )); then printf '+ '; printf '%q ' "$@"; printf '\n';
   else "$@"; fi
+}
+run_quiet() {
+  local label="$1" status
+  shift
+  if (( DRY_RUN )); then
+    printf '+ '; printf '%q ' "$@"; printf '\n'
+    return
+  fi
+  printf '\n[%s] ' "$label" >>"$INSTALL_LOG"
+  printf '%q ' "$@" >>"$INSTALL_LOG"
+  printf '\n' >>"$INSTALL_LOG"
+  if "$@" >>"$INSTALL_LOG" 2>&1; then return 0; fi
+  status=$?
+  printf '\n%s%s failed (exit %d). Recent command output follows:%s\n' \
+    "$UI_SUCCESS" "$label" "$status" "$UI_RESET" >&2
+  tail -n 80 "$INSTALL_LOG" >&2 || true
+  die "$label failed; full output is in $INSTALL_LOG"
 }
 
 while (($#)); do
@@ -229,6 +255,20 @@ start_installer_logging() {
     mv -f "$INSTALL_LOG" "$INSTALL_LOG.previous"
   fi
   exec > >(tee -a "$INSTALL_LOG") 2>&1
+  if [[ -t 1 ]]; then
+    UI_ACCENT=$'\033[1;36m'
+    UI_MUTED=$'\033[0;37m'
+    UI_SUCCESS=$'\033[1;31m'
+    UI_RESET=$'\033[0m'
+  fi
+  printf '\n%s┌──────────────────────────────┐%s\n' "$UI_ACCENT" "$UI_RESET"
+  printf '%s│  Klipper // Android  setup   │%s\n' "$UI_ACCENT" "$UI_RESET"
+  printf '%s└──────────────────────────────┘%s\n' "$UI_ACCENT" "$UI_RESET"
+  printf '%sMode:%s %s  %sChannel:%s %s\n' \
+    "$UI_MUTED" "$UI_RESET" "$([[ $UPDATE -eq 1 ]] && printf update || printf install)" \
+    "$UI_MUTED" "$UI_RESET" "$CHANNEL"
+  printf '%sDetailed command output is saved to:%s %s\n' \
+    "$UI_MUTED" "$UI_RESET" "$INSTALL_LOG"
   printf '\n===== installer started %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   trap 'status=$?; printf "===== installer finished %s (status %d) =====\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$status"' EXIT
   trap 'status=$?; printf "ERROR: installer command failed near line %d (status %d)\n" "${BASH_LINENO[0]:-${LINENO}}" "$status" >&2' ERR
@@ -264,7 +304,7 @@ log "Installing native Termux dependencies"
 PACKAGES=(git python clang make ndk-sysroot libffi openssl zlib curl unzip iproute2 termux-services)
 (( INSTALL_MOONRAKER )) && PACKAGES+=(libsodium libjpeg-turbo)
 (( INSTALL_UI )) && PACKAGES+=(nginx)
-run pkg install -y "${PACKAGES[@]}"
+run_quiet "Termux packages" pkg install -y "${PACKAGES[@]}"
 
 run mkdir -p "$BIN_DIR" "$STATE_DIR" "$DATA_DIR/config" "$DATA_DIR/logs" \
   "$DATA_DIR/gcodes" "$DATA_DIR/gcodes/firmware" "$DATA_DIR/database" "$SERVICE_ROOT" \
@@ -302,12 +342,12 @@ if [[ -z "$SOURCE_DIR" ]]; then
   [[ -n "$REPOSITORY" ]] || die "set K4A_REPOSITORY to this project's public Git URL"
   if [[ -d "$SOURCE_INSTALL_DIR/.git" ]]; then
     log "Updating bridge source"
-    run git -C "$SOURCE_INSTALL_DIR" fetch --depth=1 --no-tags origin HEAD
+    run_quiet "Bridge source download" git -C "$SOURCE_INSTALL_DIR" fetch --depth=1 --no-tags origin HEAD
     if (( DRY_RUN )) || [[ "$(git -C "$SOURCE_INSTALL_DIR" rev-parse HEAD)" != \
         "$(git -C "$SOURCE_INSTALL_DIR" rev-parse FETCH_HEAD)" ]] || \
         ! git -C "$SOURCE_INSTALL_DIR" diff --quiet || \
         ! git -C "$SOURCE_INSTALL_DIR" diff --cached --quiet; then
-      run git -C "$SOURCE_INSTALL_DIR" checkout --detach --force FETCH_HEAD
+      run_quiet "Bridge source checkout" git -C "$SOURCE_INSTALL_DIR" checkout --detach --force FETCH_HEAD
     else
       log "Bridge source is already current"
     fi
@@ -315,7 +355,7 @@ if [[ -z "$SOURCE_DIR" ]]; then
     log "Downloading bridge source"
     run mkdir -p "$(dirname "$SOURCE_INSTALL_DIR")"
     [[ ! -e "$SOURCE_INSTALL_DIR" ]] || run rm -rf -- "$SOURCE_INSTALL_DIR"
-    run git clone --depth=1 --single-branch --no-tags "$REPOSITORY" "$SOURCE_INSTALL_DIR"
+    run_quiet "Bridge source download" git clone --depth=1 --single-branch --no-tags "$REPOSITORY" "$SOURCE_INSTALL_DIR"
   fi
   SOURCE_DIR="$SOURCE_INSTALL_DIR"
 fi
@@ -378,7 +418,7 @@ else
 fi
 if (( BRIDGE_BUILD_REQUIRED )); then
   log "Building native PTY bridge"
-  run "$SOURCE_DIR/bridge/build-termux.sh" "$BRIDGE_OUTPUT"
+  run_quiet "Native PTY bridge build" "$SOURCE_DIR/bridge/build-termux.sh" "$BRIDGE_OUTPUT"
   prepare_update_mutation
   run install -m 0755 "$BRIDGE_OUTPUT" "$BIN_DIR/klipper-android-bridge"
   if (( ! DRY_RUN )); then printf '%s\n' "$BRIDGE_BUILD_HASH" >"$BRIDGE_HASH_FILE"; fi
@@ -401,13 +441,15 @@ shallow_checkout() {
     target="$revision"
     log "$(basename "$destination") source revision is already present"
   else
-    run git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
+    run_quiet "$(basename "$destination") source download" \
+      git -C "$destination" fetch --depth=1 --no-tags origin "$revision"
     (( DRY_RUN )) || target="$(git -C "$destination" rev-parse FETCH_HEAD)"
   fi
   if (( DRY_RUN )) || [[ "$(git -C "$destination" rev-parse HEAD 2>/dev/null || true)" != "$target" ]] || \
       ! git -C "$destination" diff --quiet || ! git -C "$destination" diff --cached --quiet; then
     prepare_update_mutation
-    run git -C "$destination" checkout --detach --force "${target:-FETCH_HEAD}"
+    run_quiet "$(basename "$destination") source checkout" \
+      git -C "$destination" checkout --detach --force "${target:-FETCH_HEAD}"
   else
     log "$(basename "$destination") working tree is already current"
   fi
@@ -417,21 +459,21 @@ sync_python_environment() {
   local name="$1" environment="$2" requirements="$3"
   if (( DRY_RUN )); then
     run python -m venv "$environment"
-    run "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
-    run "$environment/bin/pip" install --no-cache-dir -r "$requirements"
+    run_quiet "$name Python tooling" "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
+    run_quiet "$name Python requirements" "$environment/bin/pip" install --no-cache-dir -r "$requirements"
     return
   fi
   if [[ ! -x "$environment/bin/python" || ! -x "$environment/bin/pip" ]]; then
     prepare_update_mutation
     [[ ! -e "$environment" ]] || run rm -rf -- "$environment"
     run python -m venv "$environment"
-    run "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
+    run_quiet "$name Python tooling" "$environment/bin/pip" install --no-cache-dir --upgrade pip wheel
   fi
   log "Checking $name Python dependencies"
   prepare_update_mutation
   # pip operates incrementally in the retained environment: already-satisfied
   # packages are reused and only changed/missing requirements are installed.
-  run "$environment/bin/pip" install --no-cache-dir -r "$requirements"
+  run_quiet "$name Python requirements" "$environment/bin/pip" install --no-cache-dir -r "$requirements"
 }
 
 log "Installing native Klipper"
@@ -561,7 +603,7 @@ if (( INSTALL_UI )); then
   if (( INSTALL_MAINSAIL )); then
     log "Installing Mainsail $MAINSAIL_VERSION"
     run rm -f -- "$MAINSAIL_ARCHIVE.part"
-    run curl -fL --retry 3 --retry-delay 2 "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE.part"
+    run curl -fL --retry 3 --retry-delay 2 --progress-bar "$MAINSAIL_URL" -o "$MAINSAIL_ARCHIVE.part"
     run mv -f -- "$MAINSAIL_ARCHIVE.part" "$MAINSAIL_ARCHIVE"
     if [[ "$CHANNEL" == stable && -n "$MAINSAIL_SHA256" ]]; then
       if (( DRY_RUN )); then
