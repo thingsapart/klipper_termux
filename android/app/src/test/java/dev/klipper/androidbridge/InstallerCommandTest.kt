@@ -6,15 +6,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InstallerCommandTest {
-    @Test fun buildsCopyablePinnedCommand() {
-        assertEquals(
-            "pkg install -y curl && curl -fsSL 'https://example.test/install.sh' | " +
-                "K4A_REPOSITORY='https://example.test/repo.git' bash",
-            InstallerCommand.create(
-                "https://example.test/install.sh",
-                "https://example.test/repo.git",
-            ),
+    @Test fun buildsFreshInstallerCommand() {
+        val command = InstallerCommand.create(
+            "https://example.test/install.sh",
+            "https://example.test/repo.git",
         )
+        assertTrue(command.contains("pkg install -y curl >/dev/null"))
+        assertTrue(command.contains("k4a_refresh='\"\$(date +%s)\""))
+        assertTrue(command.contains("Cache-Control: no-cache"))
+        assertTrue(command.contains("K4A_REPOSITORY='https://example.test/repo.git'"))
     }
 
     @Test fun recognizesPublicationPlaceholders() {
@@ -29,13 +29,11 @@ class InstallerCommandTest {
     }
 
     @Test fun buildsNonInteractiveUpdateCommand() {
-        assertEquals(
-            "pkg install -y curl && curl -fsSL 'https://example.test/install.sh' | " +
-                "K4A_REPOSITORY='https://example.test/repo.git' bash -s -- --update",
-            InstallerCommand.createUpdate(
-                "https://example.test/install.sh",
-                "https://example.test/repo.git",
-            ),
+        val command = InstallerCommand.createUpdate(
+            "https://example.test/install.sh?channel=stable",
+            "https://example.test/repo.git",
         )
+        assertTrue(command.contains("channel=stable&k4a_refresh="))
+        assertTrue(command.endsWith("bash \"\$installer\" --update"))
     }
 }
