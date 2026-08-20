@@ -22,7 +22,12 @@ class UsbSession(
     }
 
     private fun usbToHostLoop() {
-        val buffer = ByteArray(BUFFER_SIZE)
+        // A queued read must use exactly the queue buffer size. With size=0 in
+        // setReadQueue(), usb-serial selects the endpoint's max packet size.
+        // Keeping two packet-sized requests queued minimizes attach-to-read
+        // latency without adding large buffers or a polling timeout.
+        val readSize = port.readQueueBufferSize.takeIf { it > 0 } ?: BUFFER_SIZE
+        val buffer = ByteArray(readSize)
         try {
             val output = socket.getOutputStream()
             while (!closed.get()) {

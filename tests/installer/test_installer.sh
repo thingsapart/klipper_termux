@@ -193,6 +193,14 @@ grep -q '^device=main,auto,250000,8,1,none,dtr+rts,' \
   "$ROOT/installer/config/bridge.conf.example"
 grep -q 'migrate legacy bridge flags to dtr+rts' "$ROOT/installer/install.sh"
 grep -q 'migrate generated bridge selector from offline to auto' "$ROOT/installer/install.sh"
+migrated_bridge_line="$(printf '%s\n' \
+  'device=main,offline,250000,8,1,none,dtr+rts,/tmp/main' | \
+  sed -E 's#^(device=main,)offline(,250000,8,1,none,(none|dtr\+rts),.*)$#\1auto\2#')"
+[[ "$migrated_bridge_line" == \
+  'device=main,auto,250000,8,1,none,dtr+rts,/tmp/main' ]] || {
+  echo "offline-to-auto bridge migration failed: $migrated_bridge_line" >&2
+  exit 1
+}
 
 stdin_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-stdin-test.XXXXXX")"
 PREFIX=/not/termux HOME="$stdin_home" \

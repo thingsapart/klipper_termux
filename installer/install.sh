@@ -447,7 +447,7 @@ if [[ -f "$BRIDGE_CONFIG" ]] && grep -qE \
   else
     prepare_update_mutation
     sed -i -E \
-      's|^(device=main,)offline(,250000,8,1,none,(none|dtr\+rts),.*)$|\1auto\2|' \
+      's#^(device=main,)offline(,250000,8,1,none,(none|dtr\+rts),.*)$#\1auto\2#' \
       "$BRIDGE_CONFIG"
   fi
 fi
