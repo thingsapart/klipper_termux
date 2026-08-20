@@ -103,25 +103,25 @@ toolchain_is_usable() {
 
 prepare_glibc_toolchain() {
   local root="$1" executable real wrapper
-  command -v glibc-runner >/dev/null 2>&1 || die "glibc-runner did not install its launcher command"
+  command -v grun >/dev/null 2>&1 || die "glibc-runner did not install the grun command"
 
-  # Undo wrappers produced by older K4A releases.  Wrappers work for a command
-  # launched by the shell, but GCC's collect2/lto-wrapper processes use
-  # posix_spawn() internally and cannot launch the nested Bionic shell wrappers.
+  # Preserve the pristine toolchain binaries and their original RPATHs.  Using
+  # glibc-runner -c mutates those RPATHs and makes GCC's cc1/lto1 processes
+  # unstable.  LTO is disabled in the K4A build Makefile, so the one nested
+  # process path which cannot use a shell wrapper is never invoked.
   while IFS= read -r -d '' real; do
     wrapper=${real%.k4a-real}
-    if [[ ! -e "$wrapper" ]] || grep -Iq 'exec grun ' "$wrapper"; then
-      rm -f -- "$wrapper"
-      mv -- "$real" "$wrapper"
-    fi
+    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$wrapper"
+    chmod 0755 "$wrapper"
   done < <(find "$root" -type f -name '*.k4a-real' -print0)
 
-  # Configure every executable ELF with Termux's glibc interpreter.  Unlike a
-  # shell wrapper, this remains valid when another toolchain binary spawns it.
   while IFS= read -r -d '' executable; do
     file -b "$executable" | grep -qE '^ELF .* (executable|pie executable)' || continue
-    glibc-runner -c "$executable" >/dev/null
-  done < <(find "$root" -type f -perm -u+x -print0)
+    real="$executable.k4a-real"
+    mv -- "$executable" "$real"
+    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$executable"
+    chmod 0755 "$executable"
+  done < <(find "$root" -type f ! -name '*.k4a-real' -perm -u+x -print0)
 }
 
 remove_stale_toolchain_staging() {
@@ -130,6 +130,22 @@ remove_stale_toolchain_staging() {
     [[ -d "$candidate" ]] || continue
     rm -rf -- "$candidate"
   done
+}
+
+purge_arm_toolchain() {
+  rm -rf -- "$HOME_DIR/.local/opt/k4a-arm-toolchain" "$HOME_DIR/.local/opt/k4a-arm-toolchain.previous" \
+    "$HOME_DIR/.cache/k4a/toolchains"
+  rm -f -- "$HOME_DIR"/.cache/k4a-toolchain.*.tar.xz
+  remove_stale_toolchain_staging
+}
+
+toolchain_was_configured_in_place() {
+  local root="$HOME_DIR/.local/opt/k4a-arm-toolchain" executable
+  for executable in "$root/bin/arm-none-eabi-gcc" "$root/bin/arm-none-eabi-gcc.k4a-real"; do
+    [[ -f "$executable" ]] || continue
+    grep -aqF "$PREFIX/glibc/lib/ld-" "$executable" && return 0
+  done
+  return 1
 }
 
 install_toolchain() (
@@ -154,7 +170,7 @@ install_toolchain() (
   mkdir -p "$HOME_DIR/.cache/k4a/toolchains" "$(dirname "$destination")"
   if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
     printf 'Checking the compatibility runner…\n'
-    if ! command -v glibc-runner >/dev/null 2>&1 || ! command -v file >/dev/null 2>&1; then
+    if ! command -v grun >/dev/null 2>&1 || ! command -v file >/dev/null 2>&1; then
       pkg install -y glibc-repo file
       pkg install -y glibc-runner
     fi
@@ -292,6 +308,10 @@ build_firmware() (
   line=$(profile_line "$profile") || die "unknown profile: $profile"
   IFS='|' read -r id name revision transport artifact required method flash_board config reference <<<"$line"
   [[ -d "$KLIPPER_DIR/.git" && -f "$KLIPPER_DIR/Makefile" ]] || die "Klipper source not found at $KLIPPER_DIR"
+  if toolchain_was_configured_in_place; then
+    printf 'The previous installer modified the Arm toolchain in place; removing it for a clean reinstall…\n'
+    purge_arm_toolchain
+  fi
   if ! compiler=$(find_compiler 2>/dev/null); then
     printf 'Required ARM toolchain is missing; installing it now...\n'
     install_toolchain
@@ -456,8 +476,12 @@ flash_build() (
 clean_cache() {
   case "$1" in
     builds) rm -rf -- "$BUILD_ROOT"; mkdir -p "$BUILD_ROOT" ;;
-    toolchain) rm -rf -- "$HOME_DIR/.local/opt/k4a-arm-toolchain" ;;
-    all) rm -rf -- "$BUILD_ROOT" "$HOME_DIR/.local/opt/k4a-arm-toolchain"; mkdir -p "$BUILD_ROOT" ;;
+    toolchain) purge_arm_toolchain ;;
+    all)
+      rm -rf -- "$BUILD_ROOT"
+      purge_arm_toolchain
+      mkdir -p "$BUILD_ROOT"
+      ;;
     *) die "clean expects builds, toolchain, or all" ;;
   esac
 }
