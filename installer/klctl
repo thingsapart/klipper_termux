@@ -1,0 +1,434 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -euo pipefail
+DATA_DIR="@DATA_DIR@"
+PREFIX="@PREFIX@"
+HOME_DIR="@HOME@"
+WEB_PORT="@WEB_PORT@"
+STATE_DIR="$HOME_DIR/.local/state/klipper-android"
+SERVICES=(@SERVICES@)
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  COLOR_OK=$'\033[1;32m'
+  COLOR_FAIL=$'\033[1;31m'
+  COLOR_RESET=$'\033[0m'
+else
+  COLOR_OK=""
+  COLOR_FAIL=""
+  COLOR_RESET=""
+fi
+
+check() {
+  local label="$1" output
+  shift
+  if output=$("$@" 2>&1); then
+    printf '%s[ok]%s   %s\n' "$COLOR_OK" "$COLOR_RESET" "$label"
+  else
+    printf '%s[FAIL]%s %s\n' "$COLOR_FAIL" "$COLOR_RESET" "$label"
+    [[ -n "$output" ]] && printf '       %s\n' "$output"
+    failures=$((failures + 1))
+  fi
+}
+
+service_is_up() {
+  local status
+  status=$(SVDIR="$PREFIX/var/service" sv status "$1" 2>&1) || true
+  if grep -q '^run:' <<<"$status"; then return 0; fi
+  printf '%s' "$status"
+  return 1
+}
+
+websocket_proxy_works() {
+  local response
+  response=$(curl -sS -D - -o /dev/null --max-time 2 \
+    -H 'Connection: Upgrade' \
+    -H 'Upgrade: websocket' \
+    -H 'Sec-WebSocket-Version: 13' \
+    -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+    -H "Origin: http://127.0.0.1:$WEB_PORT" \
+    "http://127.0.0.1:$WEB_PORT/websocket" 2>/dev/null || true)
+  grep -qE '^HTTP/[0-9.]+ 101([[:space:]]|$)' <<<"$response"
+}
+
+ssh_server_works() {
+  local banner
+  # Android commonly denies the NETLINK_INET_DIAG socket used by `ss`, even
+  # to the Termux app that owns the listener. Read only SSH's first line and
+  # enforce the deadline in a separate process; curl's telnet handler can stay
+  # open after --max-time on some Termux/Android combinations.
+  banner=$("$PREFIX/bin/timeout" 3 "$PREFIX/bin/bash" -c \
+    'IFS= read -r line < /dev/tcp/127.0.0.1/2020; printf "%s" "$line"' \
+    2>/dev/null || true)
+  [[ "$banner" == SSH-2.0-* ]]
+}
+
+wait_for_ssh_state() {
+  local expected="$1" attempt
+  for attempt in 1 2 3 4 5; do
+    if [[ "$expected" == up ]] && ssh_server_works; then return 0; fi
+    if [[ "$expected" == down ]] && ! ssh_server_works; then return 0; fi
+    sleep 1
+  done
+  if [[ "$expected" == up ]]; then
+    echo "SSH did not begin listening on port 2020" >&2
+  else
+    echo "SSH is still listening on port 2020 after the stop request" >&2
+  fi
+  return 1
+}
+
+set_mdns_hostname() {
+  local hostname="$1" config="$DATA_DIR/config/moonraker.conf" temporary
+  [[ "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || {
+    echo "hostname must be a lowercase DNS label of 1-63 letters, digits, or hyphens" >&2
+    return 2
+  }
+  [[ -f "$config" ]] || { echo "Moonraker configuration not found: $config" >&2; return 1; }
+  temporary=$(mktemp "$config.k4a.XXXXXX")
+  awk -v hostname="$hostname" '
+    BEGIN { in_section = 0; found_section = 0; wrote = 0 }
+    /^[[:space:]]*\[[^]]+\][[:space:]]*$/ {
+      if (in_section && !wrote) { print "mdns_hostname: " hostname; wrote = 1 }
+      if ($0 ~ /^[[:space:]]*\[zeroconf\][[:space:]]*$/) {
+        in_section = 1; found_section = 1
+      } else {
+        in_section = 0
+      }
+    }
+    in_section && /^[[:space:]]*mdns_hostname[[:space:]]*:/ {
+      if (!wrote) { print "mdns_hostname: " hostname; wrote = 1 }
+      next
+    }
+    { print }
+    END {
+      if (in_section && !wrote) print "mdns_hostname: " hostname
+      if (!found_section) print "\n[zeroconf]\nmdns_hostname: " hostname
+    }
+  ' "$config" >"$temporary"
+  mv -f -- "$temporary" "$config"
+  if [[ -d "$PREFIX/var/service/moonraker" ]] && \
+      SVDIR="$PREFIX/var/service" sv status moonraker 2>/dev/null | grep -q '^run:'; then
+    SVDIR="$PREFIX/var/service" sv restart moonraker
+  fi
+  printf 'mDNS hostname set to %s.local\n' "$hostname"
+}
+
+install_starter_config() {
+  local config="$DATA_DIR/config/printer.cfg"
+  local example="$DATA_DIR/config/printer.cfg.example"
+  [[ -f "$example" ]] || { echo "Starter template not found: $example" >&2; return 1; }
+  if [[ -s "$config" ]] && \
+      ! grep -qE '^# (Managed starter configuration for Klipper Android|Replace this example with the configuration)' "$config"; then
+    printf 'Existing printer-specific configuration preserved: %s\n' "$config"
+    return 0
+  fi
+  install -m 0600 "$example" "$config"
+  mkdir -p "$STATE_DIR"
+  touch "$STATE_DIR/starter-config-installed"
+  if [[ -d "$PREFIX/var/service/klipper" ]] && \
+      SVDIR="$PREFIX/var/service" sv status klipper 2>/dev/null | grep -q '^run:'; then
+    SVDIR="$PREFIX/var/service" sv restart klipper
+  fi
+  printf 'Starter printer configuration installed at %s\n' "$config"
+  printf 'Replace it with the printer-specific Klipper configuration before controlling hardware.\n'
+}
+
+setup_ssh() {
+  local config="$PREFIX/etc/ssh/sshd_config" username address
+  printf 'Installing OpenSSH. Existing SSH sessions may disconnect when the server restarts.\n'
+  pkg install -y openssh
+  printf '\nChoose the password for the Termux user (%s).\n' "$(whoami)"
+  passwd
+  if grep -qE '^[#[:space:]]*Port[[:space:]]+' "$config"; then
+    sed -i -E 's/^[#[:space:]]*Port[[:space:]]+.*/Port 2020/' "$config"
+  else
+    printf '\nPort 2020\n' >>"$config"
+  fi
+  if grep -qE '^[#[:space:]]*PasswordAuthentication[[:space:]]+' "$config"; then
+    sed -i -E 's/^[#[:space:]]*PasswordAuthentication[[:space:]]+.*/PasswordAuthentication yes/' "$config"
+  else
+    printf 'PasswordAuthentication yes\n' >>"$config"
+  fi
+  sshd -t
+  mkdir -p "$STATE_DIR"
+  if [[ -d "$PREFIX/var/service/sshd" ]] && command -v sv-enable >/dev/null 2>&1; then
+    # RUN_COMMAND does not inherit the SVDIR normally exported by an
+    # interactive termux-services shell. Always provide it explicitly.
+    SVDIR="$PREFIX/var/service" sv-enable sshd >/dev/null
+    touch "$STATE_DIR/ssh-autostart"
+    rm -f "$PREFIX/var/service/sshd/down"
+    SVDIR="$PREFIX/var/service" sv -w 5 restart sshd
+  else
+    pkill -x sshd >/dev/null 2>&1 || true
+    sshd
+  fi
+  touch "$STATE_DIR/ssh-configured"
+  wait_for_ssh_state up
+  username=$(whoami)
+  address=$(ip -4 -o addr show scope global 2>/dev/null | awk 'NR == 1 { split($4, a, "/"); print a[1] }')
+  printf '\nSSH is listening on port 2020.\n'
+  if [[ -n "$address" ]]; then
+    printf 'Connect with: ssh -p 2020 %s@%s\n' "$username" "$address"
+  else
+    printf 'Connect with: ssh -p 2020 %s@PHONE_LAN_IP\n' "$username"
+  fi
+}
+
+ssh_service() {
+  [[ -d "$PREFIX/var/service/sshd" ]] || {
+    echo "SSH is not installed; run klctl ssh-setup first" >&2
+    return 1
+  }
+  service-daemon start >/dev/null
+  mkdir -p "$STATE_DIR"
+  case "$1" in
+    start-auto)
+      touch "$STATE_DIR/ssh-autostart"
+      rm -f "$PREFIX/var/service/sshd/down"
+      SVDIR="$PREFIX/var/service" sv -w 5 up sshd
+      wait_for_ssh_state up
+      ;;
+    start-once)
+      rm -f "$STATE_DIR/ssh-autostart"
+      touch "$PREFIX/var/service/sshd/down"
+      SVDIR="$PREFIX/var/service" sv -w 5 once sshd
+      wait_for_ssh_state up
+      ;;
+    stop)
+      # Keep the auto-start preference for the next explicit stack start, but
+      # persist the current stopped state across runsvdir/service-daemon restarts.
+      touch "$PREFIX/var/service/sshd/down"
+      SVDIR="$PREFIX/var/service" sv -w 5 down sshd
+      wait_for_ssh_state down
+      ;;
+    auto-on)
+      touch "$STATE_DIR/ssh-autostart"
+      rm -f "$PREFIX/var/service/sshd/down"
+      SVDIR="$PREFIX/var/service" sv -w 5 up sshd
+      wait_for_ssh_state up
+      ;;
+    auto-off)
+      rm -f "$STATE_DIR/ssh-autostart"
+      touch "$PREFIX/var/service/sshd/down"
+      SVDIR="$PREFIX/var/service" sv -w 5 down sshd
+      wait_for_ssh_state down
+      ;;
+  esac
+}
+
+reload_bridge_services() {
+  local service
+  # Configuration may be changed while the stack is stopped. Do not implicitly
+  # start it, but make every running consumer reopen the newly published PTY.
+  for service in klipper-android-bridge klipper; do
+    if [[ -d "$PREFIX/var/service/$service" ]] && service_is_up "$service" >/dev/null; then
+      SVDIR="$PREFIX/var/service" sv restart "$service"
+    fi
+  done
+}
+
+restart_klipper_if_running() {
+  if [[ -d "$PREFIX/var/service/klipper" ]] && service_is_up klipper >/dev/null; then
+    SVDIR="$PREFIX/var/service" sv restart klipper >/dev/null
+  fi
+}
+
+restore_config_backup() {
+  local backup="$1"
+  [[ -d "$backup" && -f "$backup/printer.cfg" ]] || {
+    echo "Invalid configurator backup: $backup" >&2
+    return 1
+  }
+  install -m 0600 "$backup/printer.cfg" "$DATA_DIR/config/printer.cfg"
+  if [[ -d "$backup/k4a" ]]; then
+    rm -rf -- "$DATA_DIR/config/k4a"
+    cp -a -- "$backup/k4a" "$DATA_DIR/config/k4a"
+  elif [[ -d "$backup/kab" ]]; then
+    # Migration-only support for backups created before the K4A rename.
+    rm -rf -- "$DATA_DIR/config/k4a"
+    cp -a -- "$backup/kab" "$DATA_DIR/config/k4a"
+  else
+    rm -rf -- "$DATA_DIR/config/k4a"
+  fi
+}
+
+apply_config_bundle() (
+  local encoded="$1" temporary archive extracted existing backup stamp entry klipper_was_up=0 moonraker_was_up=0
+  mkdir -p "$STATE_DIR/config-backups"
+  temporary=$(mktemp -d "$STATE_DIR/config-apply.XXXXXX")
+  archive="$temporary/bundle.zip"
+  extracted="$temporary/extracted"
+  trap 'rm -rf -- "$temporary"' EXIT
+  printf '%s' "$encoded" | base64 -d >"$archive" || { echo "Invalid base64 configuration bundle" >&2; return 2; }
+  [[ $(wc -c <"$archive") -le 1048576 ]] || { echo "Configuration bundle exceeds 1 MiB" >&2; return 2; }
+  unzip -tq "$archive" >/dev/null || { echo "Invalid configuration ZIP" >&2; return 2; }
+  while IFS= read -r entry; do
+    [[ -n "$entry" && "$entry" != /* && "$entry" != *".."* ]] || { echo "Unsafe ZIP entry: $entry" >&2; return 2; }
+    [[ "$entry" =~ ^(printer\.cfg|k4a/.*|manifest\.properties|validation-report\.txt|README\.txt|firmware/.*|klipper-config-project\.properties)$ ]] || {
+      echo "Unexpected ZIP entry: $entry" >&2; return 2;
+    }
+  done < <(unzip -Z1 "$archive")
+  mkdir -p "$extracted"
+  unzip -q "$archive" -d "$extracted"
+  [[ -f "$extracted/printer.cfg" && -f "$extracted/k4a/current.cfg" ]] || { echo "Bundle is missing managed configuration files" >&2; return 2; }
+  grep -q '^# Generated by Klipper Configurator' "$extracted/printer.cfg" || { echo "Bundle root is not configurator-managed" >&2; return 2; }
+
+  existing="$DATA_DIR/config/printer.cfg"
+  if [[ -s "$existing" ]] && ! grep -qE '^# (Managed starter configuration for Klipper Android|Replace this example with the configuration|Generated by Klipper Configurator)' "$existing"; then
+    echo "Refusing to replace an unmanaged printer.cfg; export the ZIP and adopt it manually" >&2
+    return 3
+  fi
+
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  backup="$STATE_DIR/config-backups/$stamp"
+  mkdir -p "$backup"
+  [[ -f "$existing" ]] && cp -a -- "$existing" "$backup/printer.cfg"
+  [[ -d "$DATA_DIR/config/k4a" ]] && cp -a -- "$DATA_DIR/config/k4a" "$backup/k4a"
+  [[ -f "$backup/printer.cfg" ]] || cp -a -- "$DATA_DIR/config/printer.cfg.example" "$backup/printer.cfg"
+
+  service_is_up klipper >/dev/null && klipper_was_up=1
+  service_is_up moonraker >/dev/null && moonraker_was_up=1
+  rm -rf -- "$DATA_DIR/config/k4a"
+  cp -a -- "$extracted/k4a" "$DATA_DIR/config/k4a"
+  install -m 0600 "$extracted/printer.cfg" "$existing"
+  printf '%s\n' "$backup" >"$STATE_DIR/last-config-backup"
+
+  if (( klipper_was_up )); then
+    restart_klipper_if_running
+    if (( moonraker_was_up )); then
+      healthy=0
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if curl -fsS --max-time 1 http://127.0.0.1:7125/server/info 2>/dev/null | grep -q '"klippy_state"[[:space:]]*:[[:space:]]*"ready"'; then
+          healthy=1; break
+        fi
+        sleep 1
+      done
+      if (( ! healthy )); then
+        restore_config_backup "$backup"
+        restart_klipper_if_running
+        echo "Generated config did not reach ready state; restored $backup" >&2
+        return 4
+      fi
+    fi
+  fi
+  printf 'Applied configurator bundle; backup: %s\n' "$backup"
+)
+
+rollback_config_bundle() {
+  local backup
+  [[ -f "$STATE_DIR/last-config-backup" ]] || { echo "No configurator backup is available" >&2; return 1; }
+  backup=$(<"$STATE_DIR/last-config-backup")
+  [[ "$backup" == "$STATE_DIR/config-backups/"* ]] || { echo "Unsafe backup path" >&2; return 2; }
+  restore_config_backup "$backup"
+  restart_klipper_if_running
+  printf 'Restored configurator backup: %s\n' "$backup"
+}
+
+case "${1:-status}" in
+  start|stop|monitor|enable|disable)
+    exec "@HOME@/.local/bin/klipper-android-runner" "$@"
+    ;;
+  status)
+    SVDIR="$PREFIX/var/service" sv status "${SERVICES[@]}" 2>/dev/null || true
+    ;;
+  doctor)
+    failures=0
+    check "native bridge executable" test -x "$HOME_DIR/.local/bin/klipper-android-bridge"
+    check "bridge configuration exists" test -f "$DATA_DIR/config/bridge.conf"
+    if [[ -f "$DATA_DIR/config/bridge.conf" ]]; then
+      check "bridge configuration is valid" \
+        "$HOME_DIR/.local/bin/klipper-android-bridge" --check-config "$DATA_DIR/config/bridge.conf"
+    fi
+    check "Klipper Python environment" test -x "$HOME_DIR/klippy-env/bin/python"
+    check "Klipper Android launcher" test -f "$HOME_DIR/.local/bin/klippy-android.py"
+    check "Klipper printer configuration" test -f "$DATA_DIR/config/printer.cfg"
+    if [[ -d "$PREFIX/var/service/moonraker" ]]; then
+      check "Moonraker Android launcher" test -f "$HOME_DIR/.local/bin/moonraker-android.py"
+    fi
+    check "runit service directory" test -d "$PREFIX/var/service"
+    for service in "${SERVICES[@]}"; do
+      check "$service service is running" service_is_up "$service"
+    done
+    check "bridge PTY is published" test -e "$PREFIX/var/run/klipper-android/main"
+    check "Klipper API socket" test -S "$DATA_DIR/comms/klippy.sock"
+    if [[ -d "$PREFIX/var/service/moonraker" ]]; then
+      check "Moonraker API on port 7125" \
+        curl -fsS --max-time 2 http://127.0.0.1:7125/server/info
+      check "Moonraker connected to Klipper" sh -c \
+        "curl -fsS --max-time 2 http://127.0.0.1:7125/server/info | grep -q '\"klippy_connected\":true'"
+    fi
+    if [[ -d "$PREFIX/var/service/klipper-web" ]]; then
+      check "Mainsail static application" test -f "$HOME_DIR/mainsail/index.html"
+      check "Mainsail proxy can reach Moonraker" \
+        curl -fsS --max-time 2 "http://127.0.0.1:$WEB_PORT/server/info"
+      check "Mainsail websocket proxy" websocket_proxy_works
+    fi
+    if [[ -f "$STATE_DIR/ssh-configured" ]]; then
+      check "SSH server on port 2020" ssh_server_works
+    fi
+    if (( failures )); then
+      printf '\n%s[FAIL]%s doctor found %d problem(s)\n' \
+        "$COLOR_FAIL" "$COLOR_RESET" "$failures"
+    else
+      printf '\n%s[ok]%s all checks passed\n' "$COLOR_OK" "$COLOR_RESET"
+    fi
+    exit "$failures"
+    ;;
+  logs)
+    service="${2:-klipper}"
+    log_files=()
+    [[ -f "$DATA_DIR/logs/${service}.log" ]] && log_files+=("$DATA_DIR/logs/${service}.log")
+    [[ -f "$DATA_DIR/logs/$service/current" ]] && log_files+=("$DATA_DIR/logs/$service/current")
+    if ((${#log_files[@]} == 0)); then
+      log_files+=("$DATA_DIR/logs/$service/current")
+    fi
+    exec tail -n 100 -F "${log_files[@]}"
+    ;;
+  installer-log)
+    exec tail -n 200 -F "$HOME_DIR/.local/state/klipper-android/installer.log"
+    ;;
+  hostname)
+    [[ $# -eq 2 ]] || { echo "Usage: klctl hostname NAME" >&2; exit 2; }
+    set_mdns_hostname "$2"
+    ;;
+  printer-starter)
+    [[ $# -eq 1 ]] || { echo "Usage: klctl printer-starter" >&2; exit 2; }
+    install_starter_config
+    ;;
+  config-apply)
+    [[ $# -eq 2 ]] || { echo "Usage: klctl config-apply BASE64_ZIP" >&2; exit 2; }
+    apply_config_bundle "$2"
+    ;;
+  config-rollback)
+    [[ $# -eq 1 ]] || { echo "Usage: klctl config-rollback" >&2; exit 2; }
+    rollback_config_bundle
+    ;;
+  ssh-setup)
+    [[ $# -eq 1 ]] || { echo "Usage: klctl ssh-setup" >&2; exit 2; }
+    setup_ssh
+    ;;
+  ssh-start)
+    [[ $# -eq 2 && "$2" =~ ^(auto|once)$ ]] || { echo "Usage: klctl ssh-start {auto|once}" >&2; exit 2; }
+    ssh_service "start-$2"
+    ;;
+  ssh-stop)
+    [[ $# -eq 1 ]] || { echo "Usage: klctl ssh-stop" >&2; exit 2; }
+    ssh_service stop
+    ;;
+  ssh-autostart)
+    [[ $# -eq 2 && "$2" =~ ^(on|off)$ ]] || { echo "Usage: klctl ssh-autostart {on|off}" >&2; exit 2; }
+    ssh_service "auto-$2"
+    ;;
+  bridge-reload)
+    [[ $# -eq 1 ]] || { echo "Usage: klctl bridge-reload" >&2; exit 2; }
+    reload_bridge_services
+    ;;
+  restart)
+    shift
+    if (($#)); then
+      exec env SVDIR="$PREFIX/var/service" sv restart "$@"
+    else
+      exec env SVDIR="$PREFIX/var/service" sv restart "${SERVICES[@]}"
+    fi
+    ;;
+  *) echo "Usage: klctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|config-apply BASE64_ZIP|config-rollback|ssh-setup|ssh-start {auto|once}|ssh-stop|ssh-autostart {on|off}|bridge-reload|restart [services...]}" >&2; exit 2 ;;
+esac
