@@ -46,7 +46,15 @@ Usage: install.sh [options]
 EOF
 }
 
-die() { printf '%serror:%s %s\n' "$UI_ERROR" "$UI_RESET" "$*" >&2; exit 1; }
+die() {
+  if (( UI_INTERACTIVE && UI_READY )); then
+    printf '\r\033[2K%serror:%s %s\n' "$UI_ERROR" "$UI_RESET" "$*" >&3
+    printf 'error: %s\n' "$*" >>"$INSTALL_LOG"
+  else
+    printf '%serror:%s %s\n' "$UI_ERROR" "$UI_RESET" "$*" >&2
+  fi
+  exit 1
+}
 log() {
   INSTALL_STEP=$((INSTALL_STEP + 1))
   UI_STATUS_TEXT="$*"
