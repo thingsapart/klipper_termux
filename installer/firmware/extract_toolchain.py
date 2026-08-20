@@ -7,6 +7,7 @@ import shutil
 import stat
 import sys
 import tarfile
+import time
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
@@ -28,7 +29,16 @@ def main() -> int:
     archive, destination = sys.argv[1], Path(sys.argv[2])
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:xz") as source:
-        for member in source:
+        members = source.getmembers()
+        total_bytes = sum(member.size for member in members if member.isfile())
+        copied_bytes = 0
+        last_progress = 0.0
+        print(
+            f"Extracting {len(members)} toolchain entries "
+            f"({total_bytes / (1024 * 1024):.0f} MiB)…",
+            flush=True,
+        )
+        for index, member in enumerate(members, start=1):
             relative = stripped_path(member.name)
             if relative is None:
                 continue
@@ -52,10 +62,25 @@ def main() -> int:
                 if contents is None:
                     raise ValueError(f"archive entry has no contents: {member.name}")
                 with contents, target.open("wb") as output:
-                    shutil.copyfileobj(contents, output, length=1024 * 1024)
+                    while True:
+                        block = contents.read(1024 * 1024)
+                        if not block:
+                            break
+                        output.write(block)
+                        copied_bytes += len(block)
+                        now = time.monotonic()
+                        if now - last_progress >= 0.4:
+                            percent = (copied_bytes * 100 / total_bytes) if total_bytes else 100
+                            print(
+                                f"\r  [{index}/{len(members)}] {percent:5.1f}%  {member.name}",
+                                end="",
+                                flush=True,
+                            )
+                            last_progress = now
             else:
                 raise ValueError(f"unsupported archive entry: {member.name}")
             os.chmod(target, stat.S_IMODE(member.mode))
+        print("\r  [complete] Toolchain extracted.                              ", flush=True)
     return 0
 
 

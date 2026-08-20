@@ -116,6 +116,7 @@ install_toolchain() {
   partial="$archive.part"
   staging=$(mktemp -d "$HOME_DIR/.cache/k4a-toolchain.XXXXXX")
   trap 'rm -rf -- "$staging"' EXIT
+  printf '[1/4] Checking the Arm GNU toolchain cache…\n'
   if ! printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - >/dev/null 2>&1; then
     rm -f -- "$archive"
     # Adopt an archive left by the older temporary-download implementation when
@@ -131,10 +132,11 @@ install_toolchain() {
     done
   fi
   if ! printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - >/dev/null 2>&1; then
+    printf '[2/4] Downloading Arm GNU Toolchain 14.2.rel1 (this is a one-time download)…\n'
     if [[ -s "$partial" ]]; then
-      curl -fL --retry 3 -C - "$url" -o "$partial"
+      curl -fL --retry 3 --progress-bar -C - "$url" -o "$partial"
     else
-      curl -fL --retry 3 "$url" -o "$partial"
+      curl -fL --retry 3 --progress-bar "$url" -o "$partial"
     fi
     printf '%s  %s\n' "$checksum" "$partial" | sha256sum -c - || {
       rm -f -- "$partial"
@@ -142,11 +144,13 @@ install_toolchain() {
     }
     mv -- "$partial" "$archive"
   else
-    printf 'Using cached, verified toolchain archive.\n'
+    printf '[2/4] Using cached, verified toolchain archive.\n'
   fi
+  printf '[3/4] Extracting the toolchain for Android storage…\n'
   python "$LIB_DIR/extract_toolchain.py" "$archive" "$staging"
   [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
   if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
+    printf '[4/4] Installing the compatibility runner and preparing compiler wrappers…\n'
     pkg install -y glibc-repo file
     pkg install -y glibc-runner
     local executable real wrapper
