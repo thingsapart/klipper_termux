@@ -1,0 +1,10 @@
+# id|name|revision|transport|artifact|required_name|flash_method|flash_board|config_file|reference
+btt-octopus-f446-v1|BTT Octopus|V1.0/V1.1 (STM32F446)|usb|klipper.bin|firmware.bin|flash-sdcard|btt-octopus-f446-v1|btt-octopus-f446-v1.config|https://www.klipper3d.org/SDCard_Updates.html
+btt-octopus-pro-f446-v1|BTT Octopus Pro|V1.0 (STM32F446)|usb|klipper.bin|firmware.bin|flash-sdcard|btt-octopus-pro-f446-v1.0|btt-octopus-pro-f446-v1.config|https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-octopus-pro-v1.0.cfg
+btt-octopus-pro-h723-v11|BTT Octopus Pro|V1.1 (STM32H723)|usb|klipper.bin|firmware.bin|flash-sdcard|btt-octopus-pro-h723-v1.1|btt-octopus-pro-h723-v11.config|https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-octopus-pro-v1.1.cfg
+btt-manta-m8p-g0b1-v1|BTT Manta M8P|V1.0/V1.1 (STM32G0B1)|usb|klipper.bin|firmware.bin|export||btt-manta-m8p-g0b1-v1.config|https://github.com/Klipper3d/klipper/tree/master/config
+btt-manta-m8p-h723-v2|BTT Manta M8P|V2.0 (STM32H723)|usb|klipper.bin|firmware.bin|export||btt-manta-m8p-h723-v2.config|https://github.com/Klipper3d/klipper/tree/master/config
+btt-skr-mini-e3-v3|BTT SKR Mini E3|V3.0 (STM32G0B1)|usb|klipper.bin|firmware.bin|flash-sdcard|btt-skr-mini-e3-v3|btt-skr-mini-e3-v3.config|https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-skr-mini-e3-v3.0.cfg
+btt-skr-pico-v1|BTT SKR Pico|V1.0 (RP2040)|usb|klipper.uf2|klipper.uf2|uf2||btt-skr-pico-v1.config|https://github.com/Klipper3d/klipper/blob/master/config/generic-bigtreetech-skr-pico-v1.0.cfg
+btt-ebb36-g0b1-usb|BTT EBB36|STM32G0B1 USB, no bootloader|usb|klipper.bin|klipper.bin|download||btt-ebb-g0b1-usb.config|https://github.com/Klipper3d/klipper/blob/master/config/sample-bigtreetech-ebb-canbus-v1.2.cfg
+btt-ebb42-g0b1-usb|BTT EBB42|STM32G0B1 USB, no bootloader|usb|klipper.bin|klipper.bin|download||btt-ebb-g0b1-usb.config|https://github.com/Klipper3d/klipper/blob/master/config/sample-bigtreetech-ebb-canbus-v1.2.cfg

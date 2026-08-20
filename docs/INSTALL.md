@@ -78,6 +78,13 @@ connect and expose configuration editing in Mainsail; connecting a physical
 printer still requires compatible Klipper firmware on the controller and the
 correct board/printer pin configuration.
 
+The **Build controller firmware** step reads the installed board-profile catalog
+and currently writable storage targets from Termux. Choose a controller revision,
+then build and either publish it to the Mainsail firmware page, copy it to
+Downloads or a detected `/storage/...` card, or open Android's Share sheet.
+Read-only removable volumes remain visible but cannot be selected for export.
+Building is optional for controllers that are already flashed.
+
 The setup wizard includes optional SSH access. **Install and configure SSH**
 opens a visible Termux session, installs `openssh`, and runs `passwd` there; the
 Android app never receives the password. It configures and starts the supervised
@@ -182,6 +189,61 @@ filesystem permission errors are not suppressed.
 The managed nginx proxy preserves Mainsail's original `Host` header when
 forwarding API and websocket traffic. This lets Moonraker validate the
 same-origin websocket without opening broad CORS access.
+
+## Build and download controller firmware
+
+K4A installs a non-interactive firmware builder with exact board profiles:
+
+```sh
+klctl firmware profiles
+klctl firmware info btt-octopus-f446-v1
+klctl firmware toolchain-install
+klctl firmware build btt-octopus-f446-v1
+```
+
+It builds from the installed `~/klipper` commit, retains incremental output per
+profile, verifies the effective Kconfig, and records a SHA-256. Successful
+builds are automatically available from **Settings > Firmware downloads** and:
+
+```text
+http://PHONE_IP:8080/firmware/
+```
+
+Each build contains the bootloader-required `firmware.bin` or `klipper.uf2`, a
+descriptive copy, settings, manifest, dictionary, and checksums. This permits a
+computer to download the result through the phone's Mainsail server and prepare
+an SD card.
+
+The ARM bare-metal compiler is installed lazily. The builder uses an existing
+`arm-none-eabi-gcc`, a Termux package when one is available, or a release-supplied
+Bionic archive configured with a URL and SHA-256. Generic glibc Linux toolchains
+are not executed directly on Android.
+
+After running `termux-setup-storage` once, export a build with:
+
+```sh
+klctl firmware list
+klctl firmware export BUILD_ID downloads
+klctl firmware export BUILD_ID /storage/XXXX-XXXX
+klctl firmware share BUILD_ID
+```
+
+Exports use a temporary file and verify it before replacing the destination.
+Android often prevents Termux from writing an SD/USB volume root; use the web
+download or Android system file picker when the direct-path probe says it is
+not writable.
+
+Profiles labeled `flash-sdcard` can update an already-running Klipper board:
+
+```sh
+klctl firmware flash BUILD_ID
+```
+
+This requires exact interactive confirmation, stops Klipper while retaining
+the Android USB/PTY bridge, passes the selected artifact and dictionary to
+Klipper's official `flash-sdcard.sh`, and restores the previous service state.
+Initial factory flashing and `export`, `uf2`, or `download` profiles still use
+their documented SD, UF2, or DFU procedure.
 
 ## Operational requirements
 

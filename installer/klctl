@@ -363,6 +363,8 @@ case "${1:-status}" in
       check "Mainsail proxy can reach Moonraker" \
         curl -fsS --max-time 2 "http://127.0.0.1:$WEB_PORT/server/info"
       check "Mainsail websocket proxy" websocket_proxy_works
+      check "Firmware download page" \
+        curl -fsS --max-time 2 "http://127.0.0.1:$WEB_PORT/firmware/"
     fi
     if [[ -f "$STATE_DIR/ssh-configured" ]]; then
       check "SSH server on port 2020" ssh_server_works
@@ -404,6 +406,10 @@ case "${1:-status}" in
     [[ $# -eq 1 ]] || { echo "Usage: klctl config-rollback" >&2; exit 2; }
     rollback_config_bundle
     ;;
+  firmware)
+    shift
+    exec "$HOME_DIR/.local/lib/k4a/firmware/firmware-manager.sh" "$@"
+    ;;
   ssh-setup)
     [[ $# -eq 1 ]] || { echo "Usage: klctl ssh-setup" >&2; exit 2; }
     setup_ssh
@@ -432,5 +438,5 @@ case "${1:-status}" in
       exec env SVDIR="$PREFIX/var/service" sv restart "${SERVICES[@]}"
     fi
     ;;
-  *) echo "Usage: klctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|config-apply BASE64_ZIP|config-rollback|ssh-setup|ssh-start {auto|once}|ssh-stop|ssh-autostart {on|off}|bridge-reload|restart [services...]}" >&2; exit 2 ;;
+  *) echo "Usage: klctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|config-apply BASE64_ZIP|config-rollback|firmware ...|ssh-setup|ssh-start {auto|once}|ssh-stop|ssh-autostart {on|off}|bridge-reload|restart [services...]}" >&2; exit 2 ;;
 esac

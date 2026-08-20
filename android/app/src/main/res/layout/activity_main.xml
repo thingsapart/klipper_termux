@@ -440,6 +440,21 @@
                 </LinearLayout>
 
                 <LinearLayout style="@style/WizardStep">
+                    <LinearLayout android:id="@+id/wizard_firmware_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_firmware" /><TextView android:id="@+id/wizard_firmware_state" style="@style/WizardHeaderState" /></LinearLayout>
+                    <LinearLayout android:id="@+id/wizard_firmware_body" style="@style/WizardBody">
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/firmware_step_description" />
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/firmware_profile" />
+                        <Spinner android:id="@+id/firmware_profile" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_code" android:spinnerMode="dialog" />
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/firmware_destination" />
+                        <Spinner android:id="@+id/firmware_destination" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:background="@drawable/bg_code" android:spinnerMode="dialog" />
+                        <TextView android:id="@+id/firmware_build_status" style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/firmware_options_loading" />
+                        <Button android:id="@+id/wizard_refresh_firmware" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/refresh_firmware_options" />
+                        <Button android:id="@+id/wizard_build_firmware" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="@string/build_and_export_firmware" />
+                        <Button android:id="@+id/wizard_skip_firmware" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/skip_firmware" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WizardStep">
                     <LinearLayout android:id="@+id/wizard_ssh_header" style="@style/WizardHeader"><TextView style="@style/WizardHeaderTitle" android:text="@string/step_ssh" /><TextView android:id="@+id/wizard_ssh_state" style="@style/WizardHeaderState" /></LinearLayout>
                     <LinearLayout android:id="@+id/wizard_ssh_body" style="@style/WizardBody">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ssh_setup_description" />
@@ -467,6 +482,11 @@
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/install_and_setup_description" />
                         <Button android:id="@+id/open_setup_wizard" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/install_and_setup" />
                         <Button android:id="@+id/update_klipper" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/update_klipper" />
+                        <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/firmware_description" />
+                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
+                            <Button android:id="@+id/build_mcu_firmware" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/build_mcu_firmware" />
+                            <Button android:id="@+id/open_firmware_builds" style="@style/MainsailButtonSecondary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/firmware_builds" />
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
                 <LinearLayout style="@style/WizardStep">

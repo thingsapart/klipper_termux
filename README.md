@@ -15,6 +15,8 @@ The project currently contains a buildable prototype:
 - Foreground service, wake lock while connected, USB permission UI, TX/RX indicators, rates, totals, and error counters.
 - Native dashboard plus a retained, loopback-only Mainsail WebView; the app-bar button switches directly between them, while the drawer and overflow menu expose Setup.
 - Native Termux installer for Klipper, Moonraker, Mainsail, nginx, and runit services.
+- Termux-native MCU profiles, incremental firmware builds, verified SD export,
+  supported serial SD updates, and downloadable artifacts at `/firmware/`.
 - Native unit tests, PTY/TCP integration test, Android protocol tests, installer checks, and latency benchmark.
 
 This has not yet been validated on a physical Android phone or printer. Do not rely on it for an unattended or safety-critical print until the hardware test matrix in [the implementation plan](docs/IMPLEMENTATION_PLAN.md) passes.

@@ -112,6 +112,56 @@ object TermuxRunner {
             commandDescription = "Update Klipper, Moonraker, Mainsail, and bridge services",
         )
 
+    fun openFirmwareConsole(context: Context): Result = dispatch(
+        context,
+        SHELL,
+        arrayOf(
+            "-lc",
+            "'$KLCTL' firmware profiles; printf '\\nBuild with: klctl firmware build PROFILE\\nList builds with: klctl firmware list\\n\\n'; exec '$SHELL' -l",
+        ),
+        background = false,
+        commandLabel = "Build MCU firmware",
+        commandDescription = "Select and build a Klipper controller firmware profile",
+    )
+
+    fun firmwareProfiles(context: Context, callback: (CommandResult) -> Unit): Result =
+        dispatchForResult(context, KLCTL, arrayOf("firmware", "profiles-machine"), callback)
+
+    fun firmwareDestinations(context: Context, callback: (CommandResult) -> Unit): Result =
+        dispatchForResult(context, KLCTL, arrayOf("firmware", "storage-machine"), callback)
+
+    fun buildFirmware(
+        context: Context,
+        profileId: String,
+        callback: (CommandResult) -> Unit,
+    ): Result {
+        require(profileId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,95}$")))
+        return dispatchForResult(context, KLCTL, arrayOf("firmware", "build", profileId), callback)
+    }
+
+    fun exportFirmware(
+        context: Context,
+        buildId: String,
+        destination: String,
+        callback: (CommandResult) -> Unit,
+    ): Result {
+        require(buildId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,95}$")))
+        require(destination == "downloads" ||
+            destination.matches(Regex("^/storage/[A-Za-z0-9._-]+$")))
+        return dispatchForResult(
+            context, KLCTL, arrayOf("firmware", "export", buildId, destination), callback,
+        )
+    }
+
+    fun shareFirmware(
+        context: Context,
+        buildId: String,
+        callback: (CommandResult) -> Unit,
+    ): Result {
+        require(buildId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,95}$")))
+        return dispatchForResult(context, KLCTL, arrayOf("firmware", "share", buildId), callback)
+    }
+
     fun configureBridge(
         context: Context,
         tokenHex: String,

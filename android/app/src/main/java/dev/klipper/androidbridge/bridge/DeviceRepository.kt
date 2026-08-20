@@ -94,6 +94,12 @@ class DeviceRepository(context: Context) {
         preferences.edit().putBoolean("ssh_setup_handled", true).apply()
     }
 
+    fun firmwareSetupHandled(): Boolean = preferences.getBoolean("firmware_setup_handled", false)
+
+    fun markFirmwareSetupHandled() {
+        preferences.edit().putBoolean("firmware_setup_handled", true).apply()
+    }
+
     fun sshAutoStart(): Boolean = preferences.getBoolean("ssh_auto_start", true)
 
     fun setSshAutoStart(enabled: Boolean) {

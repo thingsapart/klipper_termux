@@ -40,6 +40,8 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME installer_dry_run
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/installer/test_installer.sh)
+  add_test(NAME firmware_manager
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/firmware/test_firmware_manager.sh)
 endif()
 
 

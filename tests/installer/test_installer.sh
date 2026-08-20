@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 bash -n "$ROOT/installer/install.sh"
 for script in "$ROOT"/installer/services/*.run "$ROOT/installer/klctl" \
   "$ROOT/installer/klipper-android-runner" "$ROOT/bridge/build-termux.sh" \
+  "$ROOT/installer/firmware/firmware-manager.sh" \
   "$ROOT/scripts/build-app.sh" "$ROOT/scripts/build-and-upload-app.sh" \
   "$ROOT/scripts/prepare-release.sh" "$ROOT/scripts/repository-env.sh"; do
   bash -n "$script"

@@ -267,7 +267,8 @@ PACKAGES=(git python clang make ndk-sysroot libffi openssl zlib curl unzip iprou
 run pkg install -y "${PACKAGES[@]}"
 
 run mkdir -p "$BIN_DIR" "$STATE_DIR" "$DATA_DIR/config" "$DATA_DIR/logs" \
-  "$DATA_DIR/gcodes" "$DATA_DIR/database" "$SERVICE_ROOT"
+  "$DATA_DIR/gcodes" "$DATA_DIR/gcodes/firmware" "$DATA_DIR/database" "$SERVICE_ROOT" \
+  "$TERMUX_HOME/.local/lib/k4a/firmware/configs"
 
 migrate_k4a_configuration() {
   local legacy="$DATA_DIR/config/kab" current="$DATA_DIR/config/k4a"
@@ -588,6 +589,18 @@ if (( INSTALL_UI )); then
   install_service "klipper-web" "$SOURCE_DIR/installer/services/nginx.run"
 fi
 
+FIRMWARE_LIB="$TERMUX_HOME/.local/lib/k4a/firmware"
+render_template "$SOURCE_DIR/installer/firmware/firmware-manager.sh" \
+  "$FIRMWARE_LIB/firmware-manager.sh" 1
+run install -m 0644 "$SOURCE_DIR/installer/firmware/profiles.tsv" "$FIRMWARE_LIB/profiles.tsv"
+for firmware_config in "$SOURCE_DIR"/installer/firmware/configs/*.config; do
+  run install -m 0644 "$firmware_config" "$FIRMWARE_LIB/configs/$(basename "$firmware_config")"
+done
+if [[ ! -f "$DATA_DIR/gcodes/firmware/index.html" ]]; then
+  run install -m 0644 "$SOURCE_DIR/installer/firmware/index.html" \
+    "$DATA_DIR/gcodes/firmware/index.html"
+fi
+run chmod 0755 "$FIRMWARE_LIB/firmware-manager.sh"
 render_template "$SOURCE_DIR/installer/klctl" "$BIN_DIR/klctl" 1
 render_template "$SOURCE_DIR/installer/klipper-android-runner" "$BIN_DIR/klipper-android-runner" 1
 run chmod 0755 "$BIN_DIR/klctl" "$BIN_DIR/klipper-android-runner"

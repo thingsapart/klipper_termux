@@ -32,6 +32,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.ArrayAdapter
 import android.widget.CompoundButton
 import android.widget.FrameLayout
 import android.widget.ImageButton
@@ -40,6 +41,7 @@ import android.widget.EditText
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.Switch
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.drawerlayout.widget.DrawerLayout
@@ -61,6 +63,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : Activity() {
     private lateinit var repository: DeviceRepository
@@ -105,6 +108,15 @@ class MainActivity : Activity() {
     private lateinit var sshControlRow: View
     private lateinit var klipperToggle: Switch
     private lateinit var sshToggle: Switch
+    private lateinit var firmwareProfileSpinner: Spinner
+    private lateinit var firmwareDestinationSpinner: Spinner
+    private lateinit var firmwareBuildStatus: TextView
+    private lateinit var firmwareBuildButton: Button
+    private var firmwareProfiles: List<FirmwareProfileOption> = emptyList()
+    private var firmwareDestinations: List<FirmwareDestinationOption> = emptyList()
+    private var firmwareOptionsLoading = false
+    private var firmwareBuildRunning = false
+    private var firmwareOptionsGeneration = 0
     private var destination = Destination.DASHBOARD
     private var previousPrimary = Destination.DASHBOARD
     private var webView: WebView? = null
@@ -177,6 +189,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_header),
             findViewById(R.id.wizard_install_header),
             findViewById(R.id.wizard_bridge_header),
+            findViewById(R.id.wizard_firmware_header),
             findViewById(R.id.wizard_ssh_header),
             findViewById(R.id.wizard_verify_header),
         )
@@ -185,6 +198,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_body),
             findViewById(R.id.wizard_install_body),
             findViewById(R.id.wizard_bridge_body),
+            findViewById(R.id.wizard_firmware_body),
             findViewById(R.id.wizard_ssh_body),
             findViewById(R.id.wizard_verify_body),
         )
@@ -193,6 +207,7 @@ class MainActivity : Activity() {
             findViewById(R.id.wizard_permission_state),
             findViewById(R.id.wizard_install_state),
             findViewById(R.id.wizard_bridge_state),
+            findViewById(R.id.wizard_firmware_state),
             findViewById(R.id.wizard_ssh_state),
             findViewById(R.id.wizard_verify_state),
         )
@@ -213,6 +228,10 @@ class MainActivity : Activity() {
         sshControlRow = findViewById(R.id.ssh_control_row)
         klipperToggle = findViewById(R.id.klipper_toggle)
         sshToggle = findViewById(R.id.ssh_toggle)
+        firmwareProfileSpinner = findViewById(R.id.firmware_profile)
+        firmwareDestinationSpinner = findViewById(R.id.firmware_destination)
+        firmwareBuildStatus = findViewById(R.id.firmware_build_status)
+        firmwareBuildButton = findViewById(R.id.wizard_build_firmware)
         statusBridgeSwitch.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             if (BridgeState.serviceRunning) {
@@ -244,6 +263,22 @@ class MainActivity : Activity() {
         drawerMainsail.setOnClickListener { selectFromDrawer(Destination.MAINSAIL) }
         drawerSettings.setOnClickListener { selectFromDrawer(Destination.SETTINGS) }
         findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { navigate(Destination.SETUP) }
+        findViewById<Button>(R.id.build_mcu_firmware).setOnClickListener {
+            handleTermuxResult(
+                TermuxRunner.openFirmwareConsole(this),
+                "Firmware build console opened in Termux",
+            )
+        }
+        findViewById<Button>(R.id.open_firmware_builds).setOnClickListener {
+            val firmwareUrl = Uri.parse(repository.mainsailUrl()).buildUpon()
+                .path("/firmware/")
+                .clearQuery()
+                .fragment(null)
+                .build()
+                .toString()
+            navigate(Destination.MAINSAIL)
+            ensureWebView().loadUrl(firmwareUrl)
+        }
         findViewById<Button>(R.id.open_printer_configurator).setOnClickListener {
             ConfiguratorHostRegistry.host = object : ConfiguratorHost {
                 override val label = "this phone's Termux"
@@ -319,6 +354,15 @@ class MainActivity : Activity() {
             )
         }
         findViewById<Button>(R.id.wizard_usb_action).setOnClickListener { prepareUsbBridge() }
+        findViewById<Button>(R.id.wizard_refresh_firmware).setOnClickListener {
+            refreshFirmwareOptions()
+        }
+        firmwareBuildButton.setOnClickListener { buildAndExportFirmware() }
+        findViewById<Button>(R.id.wizard_skip_firmware).setOnClickListener {
+            repository.markFirmwareSetupHandled()
+            firmwareBuildStatus.text = "Firmware step marked complete. You can return and build firmware at any time."
+            renderWizard()
+        }
         findViewById<Button>(R.id.wizard_setup_ssh).setOnClickListener { setupSsh() }
         findViewById<Button>(R.id.wizard_skip_ssh).setOnClickListener {
             repository.markSshSetupHandled()
@@ -771,6 +815,179 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun refreshFirmwareOptions() {
+        if (firmwareOptionsLoading || firmwareBuildRunning) return
+        firmwareOptionsLoading = true
+        firmwareBuildStatus.text = getString(R.string.firmware_options_loading)
+        firmwareBuildButton.isEnabled = false
+        val generation = ++firmwareOptionsGeneration
+        val remaining = AtomicInteger(2)
+        val finished = {
+            if (generation == firmwareOptionsGeneration && remaining.decrementAndGet() == 0) {
+                firmwareOptionsLoading = false
+                updateFirmwareAdapters()
+                firmwareBuildStatus.text = when {
+                    firmwareProfiles.isEmpty() -> "No firmware profiles were returned. Run UPDATE first."
+                    firmwareDestinations.isEmpty() -> "No export methods were returned. Run UPDATE first."
+                    else -> "${firmwareProfiles.size} board profiles · ${firmwareDestinations.size} export methods"
+                }
+                firmwareBuildButton.isEnabled = firmwareProfiles.isNotEmpty() &&
+                    firmwareDestinations.isNotEmpty()
+            }
+        }
+        val profileDispatch = TermuxRunner.firmwareProfiles(this) { result ->
+            runOnUiThread {
+                if (generation != firmwareOptionsGeneration) return@runOnUiThread
+                if (result.succeeded) {
+                    firmwareProfiles = FirmwareCommandOutput.profiles(result.stdout)
+                } else {
+                    firmwareBuildStatus.text = firmwareResultMessage("Could not read firmware profiles", result)
+                }
+                finished()
+            }
+        }
+        if (profileDispatch != TermuxRunner.Result.SENT) {
+            firmwareOptionsLoading = false
+            firmwareBuildButton.isEnabled = false
+            handleTermuxResult(profileDispatch, "Firmware profiles requested")
+            return
+        }
+        val destinationDispatch = TermuxRunner.firmwareDestinations(this) { result ->
+            runOnUiThread {
+                if (generation != firmwareOptionsGeneration) return@runOnUiThread
+                if (result.succeeded) {
+                    firmwareDestinations = FirmwareCommandOutput.destinations(result.stdout)
+                } else {
+                    firmwareBuildStatus.text = firmwareResultMessage("Could not detect export destinations", result)
+                }
+                finished()
+            }
+        }
+        if (destinationDispatch != TermuxRunner.Result.SENT) {
+            firmwareOptionsGeneration++
+            firmwareOptionsLoading = false
+            firmwareBuildButton.isEnabled = false
+            handleTermuxResult(destinationDispatch, "Firmware storage scan requested")
+        }
+    }
+
+    private fun updateFirmwareAdapters() {
+        val selectedProfile = (firmwareProfileSpinner.selectedItem as? FirmwareProfileOption)?.id
+        val selectedDestination =
+            (firmwareDestinationSpinner.selectedItem as? FirmwareDestinationOption)?.id
+        firmwareProfileSpinner.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_item, firmwareProfiles,
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        firmwareDestinationSpinner.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_item, firmwareDestinations,
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        firmwareProfiles.indexOfFirst { it.id == selectedProfile }.takeIf { it >= 0 }?.let {
+            firmwareProfileSpinner.setSelection(it)
+        }
+        firmwareDestinations.indexOfFirst { it.id == selectedDestination }.takeIf { it >= 0 }?.let {
+            firmwareDestinationSpinner.setSelection(it)
+        }
+    }
+
+    private fun buildAndExportFirmware() {
+        if (firmwareBuildRunning) return
+        val profile = firmwareProfileSpinner.selectedItem as? FirmwareProfileOption ?: run {
+            Toast.makeText(this, "Refresh firmware profiles first", Toast.LENGTH_LONG).show()
+            return
+        }
+        val destination = firmwareDestinationSpinner.selectedItem as? FirmwareDestinationOption ?: run {
+            Toast.makeText(this, "Select an export method", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!destination.writable) {
+            firmwareBuildStatus.text = "${destination.label} is visible but not writable from Termux. Choose web download or Android share."
+            return
+        }
+        firmwareBuildRunning = true
+        firmwareProfileSpinner.isEnabled = false
+        firmwareDestinationSpinner.isEnabled = false
+        firmwareBuildButton.isEnabled = false
+        firmwareBuildButton.text = "Building…"
+        firmwareBuildStatus.text = "Building ${profile.board} ${profile.revision}. The first build may download a compiler."
+        val dispatch = TermuxRunner.buildFirmware(this, profile.id) { result ->
+            runOnUiThread { handleFirmwareBuildResult(destination, result) }
+        }
+        if (dispatch != TermuxRunner.Result.SENT) {
+            finishFirmwareAction("Could not start the firmware build")
+            handleTermuxResult(dispatch, "Firmware build requested")
+        }
+    }
+
+    private fun handleFirmwareBuildResult(
+        destination: FirmwareDestinationOption,
+        result: TermuxRunner.CommandResult,
+    ) {
+        if (!result.succeeded) {
+            finishFirmwareAction(firmwareResultMessage("Firmware build failed", result))
+            return
+        }
+        val buildId = FirmwareCommandOutput.buildId(result.stdout)
+        if (buildId == null) {
+            finishFirmwareAction("Firmware built, but Termux returned no valid build ID. Open Firmware downloads to inspect it.")
+            return
+        }
+        repository.markFirmwareSetupHandled()
+        renderWizard()
+        when (destination.id) {
+            "web" -> finishFirmwareAction("Build complete: $buildId. It is ready under Firmware downloads.")
+            "share" -> dispatchFirmwareShare(buildId)
+            else -> dispatchFirmwareExport(buildId, destination)
+        }
+    }
+
+    private fun dispatchFirmwareExport(buildId: String, destination: FirmwareDestinationOption) {
+        firmwareBuildButton.text = "Exporting…"
+        firmwareBuildStatus.text = "Build complete. Exporting and verifying ${destination.label}…"
+        val dispatch = TermuxRunner.exportFirmware(this, buildId, destination.argument) { result ->
+            runOnUiThread {
+                finishFirmwareAction(if (result.succeeded) {
+                    result.stdout.trim().ifEmpty { "Firmware exported to ${destination.label}" }
+                } else firmwareResultMessage("Firmware was built, but export failed", result))
+            }
+        }
+        if (dispatch != TermuxRunner.Result.SENT) {
+            finishFirmwareAction("Firmware was built, but Termux could not start the export")
+            handleTermuxResult(dispatch, "Firmware export requested")
+        }
+    }
+
+    private fun dispatchFirmwareShare(buildId: String) {
+        firmwareBuildButton.text = "Opening share…"
+        firmwareBuildStatus.text = "Build complete. Asking Android to share the firmware…"
+        val dispatch = TermuxRunner.shareFirmware(this, buildId) { result ->
+            runOnUiThread {
+                finishFirmwareAction(if (result.succeeded) {
+                    "Build complete: $buildId. Android share requested."
+                } else firmwareResultMessage("Firmware was built, but sharing failed", result))
+            }
+        }
+        if (dispatch != TermuxRunner.Result.SENT) {
+            finishFirmwareAction("Firmware was built, but Termux could not open Android share")
+            handleTermuxResult(dispatch, "Firmware share requested")
+        }
+    }
+
+    private fun firmwareResultMessage(prefix: String, result: TermuxRunner.CommandResult): String {
+        val detail = result.stderr.trim().ifEmpty {
+            result.errorMessage.trim().ifEmpty { "exit ${result.exitCode}" }
+        }
+        return "$prefix: $detail"
+    }
+
+    private fun finishFirmwareAction(message: String) {
+        firmwareBuildRunning = false
+        firmwareProfileSpinner.isEnabled = true
+        firmwareDestinationSpinner.isEnabled = true
+        firmwareBuildButton.isEnabled = firmwareProfiles.isNotEmpty() && firmwareDestinations.isNotEmpty()
+        firmwareBuildButton.setText(R.string.build_and_export_firmware)
+        firmwareBuildStatus.text = message
+    }
+
     private enum class WizardStatus { COMPLETE, ATTEMPTED, PENDING }
 
     private fun renderWizard() {
@@ -797,6 +1014,7 @@ class MainActivity : Activity() {
                 repository.pairingSent() || usbReady -> WizardStatus.ATTEMPTED
                 else -> WizardStatus.PENDING
             },
+            if (repository.firmwareSetupHandled()) WizardStatus.COMPLETE else WizardStatus.PENDING,
             if (repository.sshSetupHandled()) WizardStatus.COMPLETE else WizardStatus.PENDING,
             if (mainsailReady) WizardStatus.COMPLETE else WizardStatus.PENDING,
         )
@@ -891,6 +1109,11 @@ class MainActivity : Activity() {
             setMainsailAppBarVisible(true, animate = false)
         }
         if (selected == Destination.SETUP) renderWizard()
+        if (selected == Destination.SETUP && firmwareProfiles.isEmpty() && !firmwareOptionsLoading &&
+            TermuxRunner.isInstalled(this) &&
+            checkSelfPermission(TermuxRunner.PERMISSION) == PackageManager.PERMISSION_GRANTED) {
+            refreshFirmwareOptions()
+        }
     }
 
     private fun showOverflow(anchor: View) {
