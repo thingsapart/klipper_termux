@@ -316,7 +316,8 @@ mkdir -p "$ssh_test_root/prefix/bin" "$ssh_test_root/prefix/var/service/sshd" \
 ssh_state="$ssh_test_root/ssh-listening"
 cat >"$ssh_test_root/fakebin/service-daemon" <<'SH'
 #!/usr/bin/env bash
-exit 0
+# Match termux-services when runsvdir is already active.
+exit 1
 SH
 cat >"$ssh_test_root/fakebin/sv" <<'SH'
 #!/usr/bin/env bash

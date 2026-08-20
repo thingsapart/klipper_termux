@@ -178,7 +178,9 @@ ssh_service() {
     echo "SSH is not installed; run klctl ssh-setup first" >&2
     return 1
   }
-  service-daemon start >/dev/null
+  # termux-services returns nonzero when runsvdir is already active. That is a
+  # healthy, idempotent state and must not abort an SSH action under `set -e`.
+  service-daemon start >/dev/null 2>&1 || true
   mkdir -p "$STATE_DIR"
   case "$1" in
     start-auto)
