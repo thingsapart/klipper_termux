@@ -8,6 +8,23 @@ import sys
 _original_chmod = os.chmod
 
 
+if not hasattr(os, "getloadavg"):
+    def _android_getloadavg():
+        """Return Linux load averages omitted by Termux's Python build."""
+        try:
+            with open("/proc/loadavg", "r", encoding="ascii") as load_file:
+                values = load_file.read().split()[:3]
+            if len(values) == 3:
+                return tuple(float(value) for value in values)
+        except (OSError, ValueError):
+            pass
+        # Klipper uses this for informational statistics only. Do not terminate
+        # printer control merely because a vendor kernel hides proc load data.
+        return (0.0, 0.0, 0.0)
+
+    os.getloadavg = _android_getloadavg
+
+
 def _android_compatible_chmod(path, mode, *args, **kwargs):
     try:
         return _original_chmod(path, mode, *args, **kwargs)

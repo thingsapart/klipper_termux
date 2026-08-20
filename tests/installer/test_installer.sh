@@ -80,6 +80,8 @@ import os
 def denied_chmod(path, mode, *args, **kwargs):
     raise PermissionError(path)
 os.chmod = denied_chmod
+if hasattr(os, "getloadavg"):
+    del os.getloadavg
 PY
 cat >"$wrapper_home/python-hooks/serial.py" <<'PY'
 class Serial:
@@ -113,6 +115,9 @@ cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
 import os
 import chelper
 import serial
+load_average = os.getloadavg()
+assert len(load_average) == 3
+assert all(isinstance(value, float) for value in load_average)
 chelper.check_build_c_library()
 os.chmod("/dev/pts/123", 0o660)
 bridge = serial.Serial(exclusive=True)

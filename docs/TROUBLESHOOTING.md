@@ -60,6 +60,10 @@ UPDATE to install Moonraker's Android compatibility launcher.
   The Android launcher rebuilds Klipper's helper with an explicit math-library
   link. `kabctl doctor` now checks the Klipper API socket and Moonraker's actual
   Klipper connection, rather than trusting the runit process alone.
+- Run UPDATE if Klipper terminates in `statistics.py` because `os.getloadavg`
+  is missing. Termux's Python omits that optional API even though Android
+  exposes the same values through `/proc/loadavg`; the launcher supplies the
+  narrow compatibility fallback used by Klipper's informational statistics.
 - Run UPDATE if the log says `Could not exclusively lock port` for a path under
   `$PREFIX/var/run/klipper-android`. Android denies advisory `flock()` on the
   bridge PTY. The launcher disables that optional lock only for managed bridge
