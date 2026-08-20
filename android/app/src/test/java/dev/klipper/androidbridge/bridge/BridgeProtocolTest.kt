@@ -10,6 +10,10 @@ import java.nio.ByteOrder
 import java.util.UUID
 
 class BridgeProtocolTest {
+    @Test fun reservesTheZeroUuidForAutomaticDeviceSelection() {
+        assertEquals(UUID(0L, 0L), BridgeProtocol.AUTO_DEVICE_ID)
+    }
+
     @Test fun parsesCCompatibleOpenRequest() {
         val token = ByteArray(32) { it.toByte() }
         val id = UUID.fromString("00112233-4455-6677-8899-aabbccddeeff")

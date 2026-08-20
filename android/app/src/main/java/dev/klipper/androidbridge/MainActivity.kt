@@ -440,30 +440,26 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun sendPairingToTermux() {
-        val configuredDevice = UsbSerialDiscovery.findAllDrivers(usbManager, repository)
-            .firstNotNullOfOrNull { driver ->
-                if (!usbManager.hasPermission(driver.device)) return@firstNotNullOfOrNull null
-                driver.ports.firstNotNullOfOrNull { port ->
-                    repository.profileFor(driver.device, port.portNumber, create = true)?.id
-                }
-            }
+    private fun configureTermuxBridge(showFeedback: Boolean) {
         val result = TermuxRunner.configureBridge(
             this,
             repository.token().toHex(),
             repository.port(),
-            configuredDevice?.toString(),
         )
-        if (result == TermuxRunner.Result.SENT) repository.markPairingSent()
-        handleTermuxResult(
-            result,
-            if (configuredDevice == null) {
-                "Bridge configured in offline mode"
-            } else {
-                "Bridge token and device sent to Termux"
-            },
-        )
-        renderWizard()
+        if (result == TermuxRunner.Result.SENT) {
+            repository.markPairingSent()
+        }
+        if (showFeedback) {
+            handleTermuxResult(
+                result,
+                "Bridge configured to use the first available USB serial device",
+            )
+            renderWizard()
+        }
+    }
+
+    private fun sendPairingToTermux() {
+        configureTermuxBridge(showFeedback = true)
     }
 
     private fun enableExternalTermuxApps() {

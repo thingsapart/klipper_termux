@@ -3,15 +3,15 @@
 ## Current prototype workflow
 
 1. Build and install the debug APK from `android/app/build/outputs/apk/debug/app-debug.apk`.
-2. Open **Klipper USB Bridge**, connect the printer MCU through OTG or a powered hub, and grant USB access.
-3. Start the bridge service. Copy the token and note the device UUID shown on its card.
+2. Open **Klipper USB Bridge** and start the bridge service. A printer MCU may be connected now or later.
+3. When a printer is attached through OTG or a powered hub, grant USB access.
 4. In a current native Termux installation, clone this repository and run:
 
    ```sh
    installer/install.sh --source-dir "$PWD"
    ```
 
-5. Copy `~/printer_data/config/bridge.conf.example` to `bridge.conf`; replace `TOKEN` and `DEVICE_UUID`.
+5. Copy `~/printer_data/config/bridge.conf.example` to `bridge.conf` and replace `TOKEN`. The default `auto` selector uses the first permitted USB serial port.
 6. Run `kabctl printer-starter` to create a safe API-only `printer.cfg`. It
    publishes Klipper to Moonraker and enables Mainsail's virtual SD-card,
    pause/status, response, and object-exclusion components. It does not contain
@@ -64,13 +64,13 @@ in Termux** button that sends that fixed command through the same permission gat
 Installation runs in a visible Termux terminal so progress and download or
 package-manager errors are not hidden; stack start/stop/status commands remain
 background commands.
-The bridge step can place the app's token, listener port, and selected USB UUID
+The bridge step places the app's token, listener port, and automatic USB selector
 into Termux's `~/printer_data/config/bridge.conf` through the permission-gated
-command API. With no permitted USB device attached it writes `offline` instead.
-The native bridge then publishes a PTY without attempting a USB connection, so
-Klipper can start in an expected MCU-unavailable state while Moonraker and
-Mainsail remain testable. Run **Configure Termux bridge** again after granting
-USB access to replace offline mode with the real UUID.
+command API. The native bridge publishes a PTY even with no device attached and
+retries the Android service with bounded backoff. Klipper can therefore start in
+an expected MCU-unavailable state while Moonraker and Mainsail remain testable.
+When a permitted serial device appears, Android binds the next OPEN request to
+the first available port; no config rewrite or service restart is required.
 **Configure Termux bridge** also asks `kabctl` to install the starter
 configuration when no user-owned `printer.cfg` exists. Existing printer-specific
 configuration is never overwritten. This is enough for Klipper and Moonraker to

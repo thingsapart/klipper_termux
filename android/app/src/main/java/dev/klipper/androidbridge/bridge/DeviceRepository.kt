@@ -20,7 +20,10 @@ class DeviceRepository(context: Context) {
 
     fun regenerateToken(): ByteArray {
         val token = ByteArray(32).also(SecureRandom()::nextBytes)
-        preferences.edit().putString("token", token.toHex()).apply()
+        preferences.edit()
+            .putString("token", token.toHex())
+            .putBoolean("pairing_sent", false)
+            .apply()
         return token
     }
 

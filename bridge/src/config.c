@@ -123,6 +123,10 @@ static int parse_device(char *value, struct kab_config *config,
     strcpy(device->pty_link, fields[7]);
     if (!strcmp(fields[1], "offline") || !strcmp(fields[1], "DEVICE_UUID")) {
         device->online = 0;
+    } else if (!strcmp(fields[1], "auto")) {
+        /* An all-zero UUID is the wire-level selector for the first available port. */
+        memset(device->device_id, 0, sizeof(device->device_id));
+        device->online = 1;
     } else if (kab_parse_hex(fields[1], device->device_id, sizeof(device->device_id))) {
         snprintf(error, error_size, "line %u: invalid device UUID", line_number);
         return -1;

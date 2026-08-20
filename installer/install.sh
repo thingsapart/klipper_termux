@@ -438,6 +438,19 @@ if [[ -f "$BRIDGE_CONFIG" ]] && grep -qE \
       "$BRIDGE_CONFIG"
   fi
 fi
+if [[ -f "$BRIDGE_CONFIG" ]] && grep -qE \
+    '^device=main,offline,250000,8,1,none,(none|dtr\+rts),' "$BRIDGE_CONFIG"; then
+  # "offline" was the old generated default. Auto keeps the PTY available too,
+  # but also retries the Android service and selects a permitted port on attach.
+  if (( DRY_RUN )); then
+    printf '+ migrate generated bridge selector from offline to auto in %s\n' "$BRIDGE_CONFIG"
+  else
+    prepare_update_mutation
+    sed -i -E \
+      's|^(device=main,)offline(,250000,8,1,none,(none|dtr\+rts),.*)$|\1auto\2|' \
+      "$BRIDGE_CONFIG"
+  fi
+fi
 render_template "$SOURCE_DIR/installer/config/printer.cfg.example" "$DATA_DIR/config/printer.cfg.example" 1
 PRINTER_CONFIG="$DATA_DIR/config/printer.cfg"
 if [[ ! -s "$PRINTER_CONFIG" ]] || grep -qE \
@@ -601,8 +614,8 @@ log "Installation complete"
 cat <<EOF
 Next steps:
   1. Install and start the Android companion app.
-  2. Grant USB access and copy its token and device UUID.
-  3. Copy $DATA_DIR/config/bridge.conf.example to bridge.conf and fill them in.
+  2. Copy its pairing token; grant USB access when a printer is attached.
+  3. Copy $DATA_DIR/config/bridge.conf.example to bridge.conf and fill in the token.
   4. Confirm the PTY path in $DATA_DIR/config/printer.cfg.
   5. Run: kabctl doctor
   6. Start the supervised stack with: klipper-android-runner start

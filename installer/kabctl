@@ -141,6 +141,17 @@ setup_ssh() {
   fi
 }
 
+reload_bridge_services() {
+  local service
+  # Configuration may be changed while the stack is stopped. Do not implicitly
+  # start it, but make every running consumer reopen the newly published PTY.
+  for service in klipper-android-bridge klipper; do
+    if [[ -d "$PREFIX/var/service/$service" ]] && service_is_up "$service" >/dev/null; then
+      SVDIR="$PREFIX/var/service" sv restart "$service"
+    fi
+  done
+}
+
 case "${1:-status}" in
   start|stop|monitor|enable|disable)
     exec "@HOME@/.local/bin/klipper-android-runner" "$@"
@@ -217,9 +228,17 @@ case "${1:-status}" in
     [[ $# -eq 1 ]] || { echo "Usage: kabctl ssh-setup" >&2; exit 2; }
     setup_ssh
     ;;
+  bridge-reload)
+    [[ $# -eq 1 ]] || { echo "Usage: kabctl bridge-reload" >&2; exit 2; }
+    reload_bridge_services
+    ;;
   restart)
     shift
-    if (($#)); then exec sv restart "$@"; else exec sv restart "${SERVICES[@]}"; fi
+    if (($#)); then
+      exec env SVDIR="$PREFIX/var/service" sv restart "$@"
+    else
+      exec env SVDIR="$PREFIX/var/service" sv restart "${SERVICES[@]}"
+    fi
     ;;
-  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|ssh-setup|restart [services...]}" >&2; exit 2 ;;
+  *) echo "Usage: kabctl {start|stop|status|monitor|enable|disable|doctor|logs [service]|installer-log|hostname NAME|printer-starter|ssh-setup|bridge-reload|restart [services...]}" >&2; exit 2 ;;
 esac

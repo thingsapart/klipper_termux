@@ -13,6 +13,7 @@ object BridgeProtocol {
     const val DEFAULT_PORT = 27831
     const val MAX_MESSAGE = 1024
     val MAGIC = byteArrayOf(0x4b, 0x4c, 0x49, 0x50, 0x55, 0x53, 0x42, 0)
+    val AUTO_DEVICE_ID = UUID(0L, 0L)
 
     object Operation {
         const val OPEN = 1
@@ -88,4 +89,3 @@ object BridgeProtocol {
 }
 
 class ProtocolException(val status: Int, message: String) : Exception(message)
-

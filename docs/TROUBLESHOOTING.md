@@ -26,12 +26,13 @@ Regenerate or copy the token from the app and place all 64 hexadecimal character
 
 ## No printer MCU is attached yet
 
-Run **Configure Termux bridge** with no USB device attached. The app writes an
-`offline` device entry, and the native bridge publishes Klipper's PTY without
-trying to open a USB device. Start the whole stack normally. Klipper will report
-that its MCU is unavailable, but Moonraker and Mainsail should remain reachable.
-After attaching the board and granting USB access, configure the bridge again
-and restart the stack.
+Run **Configure Termux bridge** with or without a USB device attached. The app
+writes the default `auto` selector, and the native bridge publishes Klipper's
+PTY immediately. With no board present it retries harmlessly in the background;
+Klipper reports that its MCU is unavailable, but Moonraker and Mainsail remain
+reachable. After attaching a board, grant USB access in the app. The next bridge
+retry selects the first permitted serial port without another UPDATE, config
+rewrite, or stack restart.
 
 `kabctl doctor` checks both Moonraker directly on port 7125 and through the
 Mainsail nginx proxy, including an actual websocket upgrade. If either fails,
@@ -90,8 +91,10 @@ UPDATE to install Moonraker's Android compatibility launcher.
   native-USB Klipper boards. USB-to-UART boards commonly use CH341 or CP210x.
 - If the dashboard says Android sees no attached USB device, check host-mode,
   cable, hub, and board power; driver selection cannot fix failed enumeration.
-- After granting access or selecting a driver, run **Configure Termux bridge**
-  again so `bridge.conf` receives that device's stable bridge UUID.
+- The default `auto` bridge selector uses the first supported port with Android
+  USB permission. Open the app once to grant permission if its status is amber.
+- A stable device UUID is only needed for explicitly pinning aliases when more
+  than one printer controller is attached.
 
 ## MCU disconnects with the screen off
 

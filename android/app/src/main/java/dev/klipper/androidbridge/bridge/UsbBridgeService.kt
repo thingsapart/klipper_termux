@@ -124,16 +124,16 @@ class UsbBridgeService : Service() {
         socket: Socket,
         output: DataOutputStream,
     ): Boolean {
-        if (sessions.containsKey(request.deviceId)) {
-            BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.DEVICE_BUSY, "device already open")
-            return false
-        }
         val match = findPort(request.deviceId)
         if (match == null) {
-            BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.DEVICE_NOT_FOUND, "configured USB port not attached")
+            BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.DEVICE_NOT_FOUND, "no matching USB serial port attached")
             return false
         }
         val (profile, port) = match
+        if (sessions.containsKey(profile.id)) {
+            BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.DEVICE_BUSY, "device already open")
+            return false
+        }
         val device = port.driver.device
         if (!usbManager.hasPermission(device)) {
             BridgeProtocol.writeResponse(output, request.requestId, BridgeProtocol.Status.PERMISSION_REQUIRED, "grant USB permission in the app")
@@ -180,13 +180,24 @@ class UsbBridgeService : Service() {
     }
 
     private fun findPort(id: UUID): Pair<DeviceProfile, UsbSerialPort>? {
+        val automatic = id == BridgeProtocol.AUTO_DEVICE_ID
+        var permissionCandidate: Pair<DeviceProfile, UsbSerialPort>? = null
         for (driver in UsbSerialDiscovery.findAllDrivers(usbManager, repository)) {
             for (port in driver.ports) {
-                val profile = repository.profileFor(driver.device, port.portNumber, false) ?: continue
+                val profile = repository.profileFor(
+                    driver.device,
+                    port.portNumber,
+                    create = automatic,
+                ) ?: continue
                 if (profile.id == id) return profile to port
+                if (automatic) {
+                    val candidate = profile to port
+                    if (usbManager.hasPermission(driver.device)) return candidate
+                    if (permissionCandidate == null) permissionCandidate = candidate
+                }
             }
         }
-        return null
+        return permissionCandidate
     }
 
     private fun updateWakeLock() {

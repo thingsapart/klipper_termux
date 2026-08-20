@@ -189,9 +189,10 @@ grep -q '^enable_config_write_access: True$' "$ROOT/installer/config/moonraker.c
 grep -q '^\[zeroconf\]$' "$ROOT/installer/config/moonraker.conf"
 grep -q '^mdns_hostname: klipper-android$' "$ROOT/installer/config/moonraker.conf"
 grep -Fq 'proxy_set_header Host $http_host;' "$ROOT/installer/config/nginx.conf"
-grep -q '^device=main,offline,250000,8,1,none,dtr+rts,' \
+grep -q '^device=main,auto,250000,8,1,none,dtr+rts,' \
   "$ROOT/installer/config/bridge.conf.example"
 grep -q 'migrate legacy bridge flags to dtr+rts' "$ROOT/installer/install.sh"
+grep -q 'migrate generated bridge selector from offline to auto' "$ROOT/installer/install.sh"
 
 stdin_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-stdin-test.XXXXXX")"
 PREFIX=/not/termux HOME="$stdin_home" \

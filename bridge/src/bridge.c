@@ -277,6 +277,23 @@ static int open_remote(const struct kab_config *global, struct kab_session *sess
         close(descriptor);
         return -1;
     }
+    /* Klipper may have made several identify attempts while no MCU was attached.
+     * Never replay those stale request bytes as a burst into a newly attached MCU. */
+    uint8_t discarded[4096];
+    size_t discarded_total = 0;
+    for (;;) {
+        ssize_t count = read(session->pty_fd, discarded, sizeof(discarded));
+        if (count > 0) {
+            discarded_total += (size_t)count;
+            continue;
+        }
+        if (count < 0 && errno == EINTR) continue;
+        break;
+    }
+    if (discarded_total)
+        log_line("INFO", session->config->alias,
+                 "discarded %llu stale PTY byte(s) before USB attach",
+                 (unsigned long long)discarded_total);
     session->socket_fd = descriptor;
     session->remote_eof = 0;
     session->stats.connects++;

@@ -165,14 +165,19 @@ The fixed 72-byte open request is:
 | 10 | 2 | operation | `OPEN`, `LIST`, or `STATUS` |
 | 12 | 4 | request_id | Client-selected correlation ID |
 | 16 | 32 | token | Random pairing token bytes |
-| 48 | 16 | device_id | App-assigned persistent UUID; zero for non-device operations |
+| 48 | 16 | device_id | App-assigned persistent UUID; all-zero selects the first permitted serial port |
 | 64 | 4 | baud | Requested UART baud |
 | 68 | 1 | data_bits | Normally 8 |
 | 69 | 1 | stop_bits | 1 or 2 |
 | 70 | 1 | parity | None, odd, even, mark, or space enum |
 | 71 | 1 | flags | Initial DTR/RTS flags |
 
-The protocol does not carry device aliases in the hot request. Aliases are local configuration mapped to a 16-byte device UUID. This gives the open request a constant size and makes matching unambiguous.
+The protocol does not carry device aliases in the hot request. Aliases are local
+configuration mapped to a 16-byte device UUID. The reserved all-zero UUID is the
+default automatic selector: Android resolves each `OPEN` to the first supported
+port that has USB permission, or reports that permission/device attachment is
+needed. This keeps the request constant-sized while allowing unplugged installs
+to attach later without rewriting Termux configuration.
 
 ### 6.3 Response
 

@@ -1,7 +1,8 @@
-# Offline mode publishes the PTY without requiring an attached printer MCU.
-# The Android app replaces "offline" with the selected device UUID when available.
+# Auto mode publishes the PTY immediately and selects the first permitted USB
+# serial port whenever one is attached. Use a stable UUID here only when pinning
+# an alias to one of several printer controllers.
 server=127.0.0.1
 port=27831
 token=TOKEN
 log_interval=60
-device=main,offline,250000,8,1,none,dtr+rts,@PREFIX@/var/run/klipper-android/main
+device=main,auto,250000,8,1,none,dtr+rts,@PREFIX@/var/run/klipper-android/main

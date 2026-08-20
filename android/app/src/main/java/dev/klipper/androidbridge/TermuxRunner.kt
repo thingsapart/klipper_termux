@@ -52,13 +52,14 @@ object TermuxRunner {
         ))
         val config = "$HOME/printer_data/config/bridge.conf"
         val example = "$HOME/printer_data/config/bridge.conf.example"
-        val device = deviceUuid ?: "offline"
+        val device = deviceUuid ?: "auto"
         val command = "set -eu; mkdir -p '$HOME/printer_data/config'; " +
             "if [ ! -f '$config' ]; then cp '$example' '$config'; fi; " +
             "sed -i -E 's/^token=.*/token=$tokenHex/; s/^port=.*/port=$port/; " +
             "s/^device=main,[^,]*/device=main,$device/; " +
             "s|^(device=main,[^,]+,250000,8,1,none,)none,|\\1dtr+rts,|' '$config'; " +
-            "if [ -x '$KABCTL' ]; then '$KABCTL' printer-starter; fi"
+            "if [ -x '$KABCTL' ]; then '$KABCTL' printer-starter; " +
+            "'$KABCTL' bridge-reload; fi"
         return dispatch(context, SHELL, arrayOf("-lc", command))
     }
 
