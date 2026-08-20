@@ -286,7 +286,8 @@ publish_build() {
 
 build_firmware() (
   local profile="$1" line id name revision transport artifact required method flash_board config reference
-  local compiler commit short build_id out build_dir effective jobs source_artifact descriptive hash size created
+  local compiler commit short build_id out build_dir build_makefile build_policy effective jobs
+  local source_artifact descriptive hash size created
   assert_not_printing
   line=$(profile_line "$profile") || die "unknown profile: $profile"
   IFS='|' read -r id name revision transport artifact required method flash_board config reference <<<"$line"
@@ -302,19 +303,36 @@ build_firmware() (
   build_id="$id-$short-$(date -u +%Y%m%dt%H%M%Sz)-$$"
   out="$BUILD_ROOT/out/$id"
   build_dir="$BUILD_ROOT/$build_id"
-  mkdir -p "$out" "$build_dir"
+  mkdir -p "$build_dir"
+  build_makefile="$build_dir/K4A-Makefile.no-lto"
+  # GCC's lto1 currently crashes under the Termux glibc compatibility layer.
+  # Keep Klipper's upstream flags intact except for its three LTO-only flags.
+  awk '{
+    gsub(/-flto(=[^[:space:]]+)?/, "")
+    gsub(/-fwhole-program/, "")
+    gsub(/-fno-use-linker-plugin/, "")
+    print
+  }' "$KLIPPER_DIR/Makefile" >"$build_makefile"
+  grep -Eq -- '-flto(=|[[:space:]])|-fwhole-program|-fno-use-linker-plugin' "$build_makefile" && \
+    die "could not disable unsupported GCC link-time optimization"
+  build_policy=$(sha256_file "$build_makefile")
+  if [[ ! -f "$out/.k4a-build-policy" || "$(cat "$out/.k4a-build-policy")" != "$build_policy" ]]; then
+    rm -rf -- "$out"
+  fi
+  mkdir -p "$out"
+  printf '%s\n' "$build_policy" >"$out/.k4a-build-policy"
   cp -f -- "$LIB_DIR/configs/$config" "$out/.config"
   jobs=2
   [[ $(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2) -ge 4 ]] && jobs=4
   command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
   trap 'status=$?; command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock || true; exit $status' EXIT
-  make -C "$KLIPPER_DIR" OUT="$out/" KCONFIG_CONFIG="$out/.config" olddefconfig
+  make -C "$KLIPPER_DIR" -f "$build_makefile" OUT="$out/" KCONFIG_CONFIG="$out/.config" olddefconfig
   effective="$out/.config"
   while IFS= read -r setting; do
     [[ -z "$setting" || "$setting" == \#* ]] && continue
     grep -Fxq "$setting" "$effective" || die "Klipper rejected critical setting: $setting"
   done <"$LIB_DIR/configs/$config"
-  make -C "$KLIPPER_DIR" OUT="$out/" KCONFIG_CONFIG="$out/.config" -j "$jobs"
+  make -C "$KLIPPER_DIR" -f "$build_makefile" OUT="$out/" KCONFIG_CONFIG="$out/.config" -j "$jobs"
   source_artifact="$out/$artifact"
   [[ -s "$source_artifact" ]] || die "build completed without $artifact"
   cp -f -- "$source_artifact" "$build_dir/$required"

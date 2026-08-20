@@ -15,7 +15,7 @@ ln -s /bin/bash "$PREFIX/bin/bash"
 cp -R "$ROOT/installer/firmware/configs" "$LIB_DIR/"
 cp "$ROOT/installer/firmware/profiles.tsv" "$LIB_DIR/"
 cp "$ROOT/installer/firmware/extract_toolchain.py" "$LIB_DIR/"
-touch "$HOME_DIR/klipper/Makefile"
+printf 'CFLAGS += -flto=auto -fwhole-program -fno-use-linker-plugin -ggdb3\n' >"$HOME_DIR/klipper/Makefile"
 mkdir "$HOME_DIR/klipper/.git"
 
 cat >"$FAKE_BIN/arm-none-eabi-gcc" <<'EOF'
@@ -189,6 +189,10 @@ build_id=$(sed -n 's/^Build complete: //p' <<<"$output")
 [[ -f "$DATA_DIR/gcodes/firmware/$build_id/firmware.bin" ]]
 [[ -f "$DATA_DIR/gcodes/firmware/index.html" ]]
 grep -q "$build_id" "$DATA_DIR/gcodes/firmware/index.html"
+no_lto_makefile="$HOME_DIR/.cache/k4a/firmware/$build_id/K4A-Makefile.no-lto"
+[[ -f "$no_lto_makefile" ]]
+! grep -Eq -- '-flto|-fwhole-program|-fno-use-linker-plugin' "$no_lto_makefile"
+[[ -s "$HOME_DIR/.cache/k4a/firmware/out/btt-skr-mini-e3-v3/.k4a-build-policy" ]]
 
 combined_output=$(/bin/bash "$MANAGER" build-export btt-skr-pico-v1 web)
 grep -q '^Build complete: btt-skr-pico-v1-' <<<"$combined_output"
