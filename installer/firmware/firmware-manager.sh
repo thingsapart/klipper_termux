@@ -103,7 +103,10 @@ install_toolchain() {
   local arch url checksum archive staging destination="$HOME_DIR/.local/opt/k4a-arm-toolchain"
   arch=$(uname -m)
   case "$arch" in
-    aarch64|arm64) url="${K4A_ARM_TOOLCHAIN_AARCH64_URL:-}"; checksum="${K4A_ARM_TOOLCHAIN_AARCH64_SHA256:-}" ;;
+    aarch64|arm64)
+      url="${K4A_ARM_TOOLCHAIN_AARCH64_URL:-https://developer.arm.com/-/media/Files/downloads/gnu/14.2.rel1/binrel/arm-gnu-toolchain-14.2.rel1-aarch64-arm-none-eabi.tar.xz}"
+      checksum="${K4A_ARM_TOOLCHAIN_AARCH64_SHA256:-87330bab085dd8749d4ed0ad633674b9dc48b237b61069e3b481abd364d0a684}"
+      ;;
     armv7l|armv8l) url="${K4A_ARM_TOOLCHAIN_ARM_URL:-}"; checksum="${K4A_ARM_TOOLCHAIN_ARM_SHA256:-}" ;;
     *) die "no Android toolchain is configured for architecture $arch" ;;
   esac
@@ -115,6 +118,20 @@ install_toolchain() {
   printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c -
   tar -xJf "$archive" -C "$staging" --strip-components=1
   [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
+  if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
+    pkg install -y glibc-repo file
+    pkg install -y glibc-runner
+    local executable real wrapper
+    while IFS= read -r -d '' executable; do
+      file -b "$executable" | grep -qE '^ELF .* (executable|pie executable)' || continue
+      real="$executable.k4a-real"
+      mv -- "$executable" "$real"
+      wrapper="$executable"
+      printf '#!%s/bin/bash\nexec grun -f %q "$@"\n' "$PREFIX" "$real" >"$wrapper"
+      chmod 0755 "$wrapper"
+    done < <(find "$staging" -type f -perm -u+x -print0)
+  fi
+  "$staging/bin/arm-none-eabi-gcc" --version >/dev/null || die "downloaded toolchain failed its execution check"
   rm -rf -- "$destination.previous"
   [[ -d "$destination" ]] && mv -- "$destination" "$destination.previous"
   mv -- "$staging" "$destination"

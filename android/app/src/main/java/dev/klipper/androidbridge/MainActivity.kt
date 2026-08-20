@@ -126,6 +126,7 @@ class MainActivity : Activity() {
     private lateinit var wizardStateViews: List<TextView>
     private lateinit var wizardProgress: TextView
     private var lastNextWizardStep = -2
+    private var manuallySelectedWizardStep: Int? = null
     private var mainsailPageFailed = false
     private var installerIsConfigured = false
     private var cachedLanAddress: String? = null
@@ -262,7 +263,7 @@ class MainActivity : Activity() {
         drawerDashboard.setOnClickListener { selectFromDrawer(Destination.DASHBOARD) }
         drawerMainsail.setOnClickListener { selectFromDrawer(Destination.MAINSAIL) }
         drawerSettings.setOnClickListener { selectFromDrawer(Destination.SETTINGS) }
-        findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { navigate(Destination.SETUP) }
+        findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { openSetupWizard() }
         findViewById<Button>(R.id.build_mcu_firmware).setOnClickListener {
             openFirmwareBuilder()
         }
@@ -294,9 +295,9 @@ class MainActivity : Activity() {
         }
         wizardHeaders.forEachIndexed { index, header ->
             header.setOnClickListener {
-                wizardBodies[index].visibility = if (
-                    wizardBodies[index].visibility == View.VISIBLE
-                ) View.GONE else View.VISIBLE
+                manuallySelectedWizardStep = index
+                lastNextWizardStep = -2
+                renderWizard()
             }
         }
         primaryToggle.setOnClickListener { navigate(AppNavigation.toggle(destination)) }
@@ -375,7 +376,7 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.start_stack_from_web).setOnClickListener {
             requestStartEverything { handler.postDelayed({ loadMainsail() }, 1200) }
         }
-        findViewById<Button>(R.id.web_open_setup).setOnClickListener { navigate(Destination.SETUP) }
+        findViewById<Button>(R.id.web_open_setup).setOnClickListener { openSetupWizard() }
         findViewById<Button>(R.id.web_open_external).setOnClickListener { openExternal(repository.mainsailUrl()) }
         klipperToggle.setOnClickListener {
             val enabled = klipperToggle.isChecked
@@ -629,7 +630,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle(R.string.termux_required_title)
                 .setMessage(R.string.termux_required_description)
-                .setPositiveButton(R.string.open_setup) { _, _ -> navigate(Destination.SETUP) }
+                .setPositiveButton(R.string.open_setup) { _, _ -> openSetupWizard() }
                 .setNegativeButton("Cancel", null)
                 .show()
             return
@@ -869,12 +870,16 @@ class MainActivity : Activity() {
     }
 
     private fun openFirmwareBuilder() {
+        manuallySelectedWizardStep = FIRMWARE_WIZARD_STEP
+        lastNextWizardStep = -2
         navigate(Destination.SETUP)
-        wizardBodies.forEachIndexed { index, body ->
-            body.visibility = if (index == FIRMWARE_WIZARD_STEP) View.VISIBLE else View.GONE
-        }
-        lastNextWizardStep = FIRMWARE_WIZARD_STEP
         if (!firmwareOptionsLoading && !firmwareBuildRunning) refreshFirmwareOptions()
+    }
+
+    private fun openSetupWizard() {
+        manuallySelectedWizardStep = null
+        lastNextWizardStep = -2
+        navigate(Destination.SETUP)
     }
 
     private fun updateFirmwareAdapters() {
@@ -1081,13 +1086,15 @@ class MainActivity : Activity() {
                 ))
             }
         }
-        if (next != lastNextWizardStep) {
+        val displayedStep = manuallySelectedWizardStep ?: next
+        if (displayedStep != lastNextWizardStep) {
             wizardBodies.forEachIndexed { index, body ->
-                body.visibility = if (index == next || (next == -1 && index == statuses.lastIndex)) {
+                body.visibility = if (index == displayedStep ||
+                    (displayedStep == -1 && index == statuses.lastIndex)) {
                     View.VISIBLE
                 } else View.GONE
             }
-            lastNextWizardStep = next
+            lastNextWizardStep = displayedStep
         }
         findViewById<Button>(R.id.wizard_grant_permission).isEnabled = TermuxRunner.isInstalled(this)
         findViewById<Button>(R.id.wizard_enable_external_apps).isEnabled = TermuxRunner.isInstalled(this)

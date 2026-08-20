@@ -72,6 +72,7 @@ export K4A_WEB_PORT=8080
 export K4A_KLIPPER_DIR="$HOME_DIR/klipper"
 export K4A_FIRMWARE_LIB="$LIB_DIR"
 MANAGER="$ROOT/installer/firmware/firmware-manager.sh"
+grep -q '87330bab085dd8749d4ed0ad633674b9dc48b237b61069e3b481abd364d0a684' "$MANAGER"
 
 profiles=$(/bin/bash "$MANAGER" profiles)
 grep -q btt-octopus-f446-v1 <<<"$profiles"

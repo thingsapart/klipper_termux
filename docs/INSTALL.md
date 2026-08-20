@@ -218,10 +218,13 @@ descriptive copy, settings, manifest, dictionary, and checksums. This permits a
 computer to download the result through the phone's Mainsail server and prepare
 an SD card.
 
-The ARM bare-metal compiler is installed lazily. The builder uses an existing
-`arm-none-eabi-gcc`, a Termux package when one is available, or a release-supplied
-Bionic archive configured with a URL and SHA-256. Generic glibc Linux toolchains
-are not executed directly on Android.
+The ARM bare-metal compiler is installed lazily. On AArch64 phones, the builder
+pins Arm GNU Toolchain 14.2.rel1 and its published SHA-256, then runs the official
+AArch64 Linux binaries through Termux's `glibc-runner`. The original toolchain
+binaries remain unchanged behind small wrappers. A native Termux package is
+preferred when available. 32-bit ARM hosts still require release-configured
+`K4A_ARM_TOOLCHAIN_ARM_URL` and `K4A_ARM_TOOLCHAIN_ARM_SHA256` values because Arm
+does not publish a current 32-bit ARM-host archive.
 
 After running `termux-setup-storage` once, export a build with:
 
