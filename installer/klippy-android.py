@@ -1,4 +1,4 @@
-"""Launch Klipper with the one PTY permission adjustment Android requires."""
+"""Launch Klipper with the narrow PTY compatibility adjustments Android requires."""
 
 import os
 import runpy
@@ -23,6 +23,29 @@ def _android_compatible_chmod(path, mode, *args, **kwargs):
 
 
 os.chmod = _android_compatible_chmod
+
+# Klipper deliberately asks pyserial for an advisory exclusive flock. Android's
+# SELinux policy denies flock() on an app-owned PTY slave, even though the same
+# Termux process may open, configure, read, and write it. Suppress exclusivity
+# only inside our private bridge runtime directory. Real serial devices retain
+# upstream Klipper's exclusive-open behavior.
+import serial  # noqa: E402
+
+_original_serial = serial.Serial
+_bridge_serial_dir = os.path.abspath("@PREFIX@/var/run/klipper-android")
+
+
+class _AndroidBridgeSerial(_original_serial):
+    def open(self):
+        port = self.port
+        if isinstance(port, (str, bytes, os.PathLike)):
+            port_path = os.path.abspath(os.fsdecode(port))
+            if os.path.dirname(port_path) == _bridge_serial_dir:
+                self._exclusive = None
+        return super().open()
+
+
+serial.Serial = _AndroidBridgeSerial
 klippy = "@HOME@/klipper/klippy/klippy.py"
 sys.path.insert(0, os.path.dirname(klippy))
 

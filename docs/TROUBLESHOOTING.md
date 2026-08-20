@@ -59,6 +59,10 @@ UPDATE to install Moonraker's Android compatibility launcher.
   The Android launcher rebuilds Klipper's helper with an explicit math-library
   link. `kabctl doctor` now checks the Klipper API socket and Moonraker's actual
   Klipper connection, rather than trusting the runit process alone.
+- Run UPDATE if the log says `Could not exclusively lock port` for a path under
+  `$PREFIX/var/run/klipper-android`. Android denies advisory `flock()` on the
+  bridge PTY. The launcher disables that optional lock only for managed bridge
+  paths; physical serial devices keep Klipper's normal exclusive-open behavior.
 
 ## SSH setup or connection fails
 

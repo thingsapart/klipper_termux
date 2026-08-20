@@ -73,12 +73,25 @@ rm -rf "$moonraker_wrapper_home"
 wrapper_home="$(mktemp -d "${TMPDIR:-/tmp}/kab-klippy-wrapper.XXXXXX")"
 mkdir -p "$wrapper_home/klipper/klippy/chelper" "$wrapper_home/python-hooks"
 sed -e "s|@HOME@|$wrapper_home|g" \
+  -e "s|@PREFIX@|$wrapper_home/usr|g" \
   "$ROOT/installer/klippy-android.py" >"$wrapper_home/klippy-android.py"
 cat >"$wrapper_home/python-hooks/sitecustomize.py" <<'PY'
 import os
 def denied_chmod(path, mode, *args, **kwargs):
     raise PermissionError(path)
 os.chmod = denied_chmod
+PY
+cat >"$wrapper_home/python-hooks/serial.py" <<'PY'
+class Serial:
+    def __init__(self, port=None, exclusive=None, **kwargs):
+        self.port = port
+        self._exclusive = exclusive
+    def open(self):
+        if "/var/run/klipper-android/" in self.port:
+            assert self._exclusive is None
+        else:
+            assert self._exclusive is True
+        return None
 PY
 cat >"$wrapper_home/klipper/klippy/chelper/__init__.py" <<'PY'
 import os
@@ -90,11 +103,18 @@ PY
 cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
 import os
 import chelper
+import serial
 chelper.check_build_c_library()
 os.chmod("/dev/pts/123", 0o660)
+bridge = serial.Serial(exclusive=True)
+bridge.port = os.path.join(os.environ["WRAPPER_PREFIX"], "var/run/klipper-android/main")
+bridge.open()
+real = serial.Serial(port="/dev/ttyUSB0", exclusive=True)
+real.open()
 print("android PTY chmod ignored")
 PY
-PYTHONPATH="$wrapper_home/python-hooks" python3 "$wrapper_home/klippy-android.py" \
+WRAPPER_PREFIX="$wrapper_home/usr" PYTHONPATH="$wrapper_home/python-hooks" \
+  python3 "$wrapper_home/klippy-android.py" \
   | grep -q 'android PTY chmod ignored'
 grep -q -- '-lm' "$wrapper_home/.local/state/klipper-android/c-helper-linked-libm"
 cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
