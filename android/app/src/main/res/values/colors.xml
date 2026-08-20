@@ -12,4 +12,6 @@
     <color name="mainsail_text_secondary">#B6B6B6</color>
     <color name="mainsail_text_muted">#8A8F98</color>
     <color name="mainsail_button_text">#FFFFFF</color>
+    <color name="brand_klipper_red">#FF4D57</color>
+    <color name="brand_android_green">#3DDC84</color>
 </resources>

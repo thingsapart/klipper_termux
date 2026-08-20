@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Broad, barely-visible backlight. Nested layers suggest blur without a shader. -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="9dp" />
+            <solid android:color="#06FFFFFF" />
+            <stroke android:width="1dp" android:color="#08FFFFFF" />
+        </shape>
+    </item>
+    <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="7dp" />
+            <solid android:color="#04FFFFFF" />
+            <stroke android:width="1dp" android:color="#10FFFFFF" />
+        </shape>
+    </item>
+    <item android:left="4dp" android:top="4dp" android:right="4dp" android:bottom="4dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="5dp" />
+            <solid android:color="#03FFFFFF" />
+            <stroke android:width="1dp" android:color="#0CFFFFFF" />
+        </shape>
+    </item>
+</layer-list>

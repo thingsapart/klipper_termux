@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">Klipper For Android</string>
+    <string name="app_bar_klipper">Klipper</string>
+    <string name="app_bar_separator">//</string>
+    <string name="app_bar_android">Android</string>
     <string name="service_channel">Klipper For Android</string>
     <string name="service_channel_description">Keeps printer USB connections available to Termux</string>
     <string name="app_subtitle">Android · Termux · Klipper</string>

@@ -142,4 +142,14 @@
     <style name="MainsailButtonDanger" parent="MainsailButtonBase">
         <item name="android:background">@drawable/bg_button_danger</item>
     </style>
+
+    <!-- Dependency-free Android 7-9 title typography. -->
+    <style name="K4AAppBarTitleWord">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0.03</item>
+    </style>
+
+    <style name="K4AAppBarTitleSeparator">
+        <item name="android:fontFamily">monospace</item>
+    </style>
 </resources>

@@ -2,4 +2,14 @@
     <style name="AppTheme" parent="AppThemeBase">
         <item name="android:forceDarkAllowed">false</item>
     </style>
+
+    <!-- Android 10+ exposes these more distinctive system families reliably. -->
+    <style name="K4AAppBarTitleWord">
+        <item name="android:fontFamily">sans-serif-condensed-medium</item>
+        <item name="android:letterSpacing">0.04</item>
+    </style>
+
+    <style name="K4AAppBarTitleSeparator">
+        <item name="android:fontFamily">sans-serif-black</item>
+    </style>
 </resources>
