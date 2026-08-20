@@ -286,7 +286,12 @@ grep -q 'pkg install -y openssh' "$ROOT/installer/kabctl"
 grep -q 'Port 2020' "$ROOT/installer/kabctl"
 grep -q '^[[:space:]]*passwd$' "$ROOT/installer/kabctl"
 grep -q 'SVDIR="\$PREFIX/var/service" sv-enable sshd' "$ROOT/installer/kabctl"
-grep -q 'telnet://127.0.0.1:2020' "$ROOT/installer/kabctl"
+grep -q '/dev/tcp/127.0.0.1/2020' "$ROOT/installer/kabctl"
+grep -q '"\$PREFIX/bin/timeout" 3' "$ROOT/installer/kabctl"
+if grep -q 'telnet://127.0.0.1:2020' "$ROOT/installer/kabctl"; then
+  echo "kabctl doctor still uses curl's potentially hanging telnet handler" >&2
+  exit 1
+fi
 if grep -q 'ss -ltn' "$ROOT/installer/kabctl"; then
   echo "kabctl doctor still relies on Android-restricted socket diagnostics" >&2
   exit 1

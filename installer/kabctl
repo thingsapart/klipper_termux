@@ -52,8 +52,12 @@ websocket_proxy_works() {
 ssh_server_works() {
   local banner
   # Android commonly denies the NETLINK_INET_DIAG socket used by `ss`, even
-  # to the Termux app that owns the listener. Validate the service itself.
-  banner=$(curl -sS --max-time 2 telnet://127.0.0.1:2020 2>/dev/null || true)
+  # to the Termux app that owns the listener. Read only SSH's first line and
+  # enforce the deadline in a separate process; curl's telnet handler can stay
+  # open after --max-time on some Termux/Android combinations.
+  banner=$("$PREFIX/bin/timeout" 3 "$PREFIX/bin/bash" -c \
+    'IFS= read -r line < /dev/tcp/127.0.0.1/2020; printf "%s" "$line"' \
+    2>/dev/null || true)
   [[ "$banner" == SSH-2.0-* ]]
 }
 

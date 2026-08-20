@@ -83,6 +83,9 @@ UPDATE to install Moonraker's Android compatibility launcher.
 - Run UPDATE if an app-launched SSH setup created its completion marker but
   left `$PREFIX/var/service/sshd/down` in place. The setup command now supplies
   runit's service directory explicitly and records completion only after start.
+- Run UPDATE if `kabctl doctor` stops after the Mainsail websocket check. An
+  older SSH probe used curl's telnet handler, which can ignore its deadline on
+  Termux; the replacement reads one banner line under a hard process timeout.
 - Connect with the Termux username printed by the command, not the Android
   device owner's name: `ssh -p 2020 USER@PHONE_LAN_IP`.
 - Confirm `kabctl doctor` reports **SSH server on port 2020** after setup.
