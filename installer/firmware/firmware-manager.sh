@@ -93,6 +93,44 @@ toolchain_status() {
   "$compiler" --version | head -n 1
 }
 
+toolchain_is_usable() {
+  local root="$1" tool
+  for tool in gcc as ld objcopy objdump strip; do
+    [[ -x "$root/bin/arm-none-eabi-$tool" ]] && \
+      "$root/bin/arm-none-eabi-$tool" --version >/dev/null 2>&1 || return 1
+  done
+}
+
+prepare_glibc_toolchain() {
+  local root="$1" executable real wrapper
+  command -v grun >/dev/null 2>&1 || die "glibc-runner did not install the grun command"
+
+  # Repair wrappers produced by older K4A releases.  In current glibc-runner,
+  # -f is a glibc-runner option, not a grun option; plain grun is the documented
+  # launcher form and also avoids another extraction of this large archive.
+  while IFS= read -r -d '' real; do
+    wrapper=${real%.k4a-real}
+    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$wrapper"
+    chmod 0755 "$wrapper"
+  done < <(find "$root" -type f -name '*.k4a-real' -perm -u+x -print0)
+
+  while IFS= read -r -d '' executable; do
+    file -b "$executable" | grep -qE '^ELF .* (executable|pie executable)' || continue
+    real="$executable.k4a-real"
+    mv -- "$executable" "$real"
+    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$executable"
+    chmod 0755 "$executable"
+  done < <(find "$root" -type f ! -name '*.k4a-real' -perm -u+x -print0)
+}
+
+remove_stale_toolchain_staging() {
+  local candidate
+  for candidate in "$HOME_DIR"/.cache/k4a-toolchain.*; do
+    [[ -d "$candidate" ]] || continue
+    rm -rf -- "$candidate"
+  done
+}
+
 install_toolchain() (
   command -v arm-none-eabi-gcc >/dev/null 2>&1 && { toolchain_status; return; }
   if apt-cache show gcc-arm-none-eabi >/dev/null 2>&1; then
@@ -100,7 +138,8 @@ install_toolchain() (
     toolchain_status
     return
   fi
-  local arch url checksum archive partial staging destination="$HOME_DIR/.local/opt/k4a-arm-toolchain"
+  local arch url checksum archive partial staging candidate usable
+  local destination="$HOME_DIR/.local/opt/k4a-arm-toolchain"
   arch=$(uname -m)
   case "$arch" in
     aarch64|arm64)
@@ -112,10 +151,24 @@ install_toolchain() (
   esac
   [[ -n "$url" && "$checksum" =~ ^[0-9a-fA-F]{64}$ ]] || die "this release has no checksum-pinned Bionic toolchain for $arch; install arm-none-eabi-gcc manually or configure K4A_ARM_TOOLCHAIN_*_URL and _SHA256"
   mkdir -p "$HOME_DIR/.cache/k4a/toolchains" "$(dirname "$destination")"
+  if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
+    printf 'Checking the compatibility runner…\n'
+    if ! command -v grun >/dev/null 2>&1 || ! command -v file >/dev/null 2>&1; then
+      pkg install -y glibc-repo file
+      pkg install -y glibc-runner
+    fi
+    if [[ -d "$destination" ]]; then
+      prepare_glibc_toolchain "$destination"
+      if toolchain_is_usable "$destination"; then
+        remove_stale_toolchain_staging
+        printf '[2/4] Existing toolchain repaired and verified.\n[3/4] Download not required.\n[4/4] Toolchain ready.\n'
+        toolchain_status
+        return
+      fi
+    fi
+  fi
   archive="$HOME_DIR/.cache/k4a/toolchains/$checksum.tar.xz"
   partial="$archive.part"
-  staging=$(mktemp -d "$HOME_DIR/.cache/k4a-toolchain.XXXXXX")
-  trap 'rm -rf -- "$staging"' EXIT
   printf '[1/4] Checking the Arm GNU toolchain cache…\n'
   if ! printf '%s  %s\n' "$checksum" "$archive" | sha256sum -c - >/dev/null 2>&1; then
     rm -f -- "$archive"
@@ -146,22 +199,28 @@ install_toolchain() (
   else
     printf '[2/4] Using cached, verified toolchain archive.\n'
   fi
-  printf '[3/4] Extracting the toolchain…\n'
-  python "$LIB_DIR/extract_toolchain.py" "$archive" "$staging"
-  [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
-  if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
-    printf '[4/4] Installing the compatibility runner and preparing compiler wrappers…\n'
-    pkg install -y glibc-repo file
-    pkg install -y glibc-runner
-    local executable real wrapper
-    while IFS= read -r -d '' executable; do
-      file -b "$executable" | grep -qE '^ELF .* (executable|pie executable)' || continue
-      real="$executable.k4a-real"
-      mv -- "$executable" "$real"
-      wrapper="$executable"
-      printf '#!%s/bin/bash\nexec grun -f %q "$@"\n' "$PREFIX" "$real" >"$wrapper"
-      chmod 0755 "$wrapper"
-    done < <(find "$staging" -type f -perm -u+x -print0)
+  staging=""
+  for candidate in "$HOME_DIR"/.cache/k4a-toolchain.*; do
+    [[ -d "$candidate" ]] || continue
+    [[ "$arch" != aarch64 && "$arch" != arm64 ]] || prepare_glibc_toolchain "$candidate"
+    usable=0
+    toolchain_is_usable "$candidate" && usable=1
+    if (( usable )); then staging="$candidate"; break; fi
+  done
+  if [[ -n "$staging" ]]; then
+    trap 'rm -rf -- "$staging"' EXIT
+    printf '[3/4] Reusing a complete toolchain left by the interrupted installation.\n'
+    printf '[4/4] Toolchain executables already prepared.\n'
+  else
+    staging=$(mktemp -d "$HOME_DIR/.cache/k4a-toolchain.XXXXXX")
+    trap 'rm -rf -- "$staging"' EXIT
+    printf '[3/4] Extracting the toolchain…\n'
+    python "$LIB_DIR/extract_toolchain.py" "$archive" "$staging"
+    [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
+    if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
+      printf '[4/4] Installing the compatibility runner and preparing compiler wrappers…\n'
+      prepare_glibc_toolchain "$staging"
+    fi
   fi
   "$staging/bin/arm-none-eabi-gcc" --version >/dev/null || die "downloaded toolchain failed its execution check"
   rm -rf -- "$destination.previous"
@@ -171,6 +230,7 @@ install_toolchain() (
     die "could not install the extracted toolchain"
   fi
   rm -rf -- "$destination.previous"
+  remove_stale_toolchain_staging
   toolchain_status
 )
 
