@@ -103,24 +103,25 @@ toolchain_is_usable() {
 
 prepare_glibc_toolchain() {
   local root="$1" executable real wrapper
-  command -v grun >/dev/null 2>&1 || die "glibc-runner did not install the grun command"
+  command -v glibc-runner >/dev/null 2>&1 || die "glibc-runner did not install its launcher command"
 
-  # Repair wrappers produced by older K4A releases.  In current glibc-runner,
-  # -f is a glibc-runner option, not a grun option; plain grun is the documented
-  # launcher form and also avoids another extraction of this large archive.
+  # Undo wrappers produced by older K4A releases.  Wrappers work for a command
+  # launched by the shell, but GCC's collect2/lto-wrapper processes use
+  # posix_spawn() internally and cannot launch the nested Bionic shell wrappers.
   while IFS= read -r -d '' real; do
     wrapper=${real%.k4a-real}
-    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$wrapper"
-    chmod 0755 "$wrapper"
-  done < <(find "$root" -type f -name '*.k4a-real' -perm -u+x -print0)
+    if [[ ! -e "$wrapper" ]] || grep -Iq 'exec grun ' "$wrapper"; then
+      rm -f -- "$wrapper"
+      mv -- "$real" "$wrapper"
+    fi
+  done < <(find "$root" -type f -name '*.k4a-real' -print0)
 
+  # Configure every executable ELF with Termux's glibc interpreter.  Unlike a
+  # shell wrapper, this remains valid when another toolchain binary spawns it.
   while IFS= read -r -d '' executable; do
     file -b "$executable" | grep -qE '^ELF .* (executable|pie executable)' || continue
-    real="$executable.k4a-real"
-    mv -- "$executable" "$real"
-    printf '#!%s/bin/bash\nexec grun "${BASH_SOURCE[0]}.k4a-real" "$@"\n' "$PREFIX" >"$executable"
-    chmod 0755 "$executable"
-  done < <(find "$root" -type f ! -name '*.k4a-real' -perm -u+x -print0)
+    glibc-runner -c "$executable" >/dev/null
+  done < <(find "$root" -type f -perm -u+x -print0)
 }
 
 remove_stale_toolchain_staging() {
@@ -153,7 +154,7 @@ install_toolchain() (
   mkdir -p "$HOME_DIR/.cache/k4a/toolchains" "$(dirname "$destination")"
   if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
     printf 'Checking the compatibility runner…\n'
-    if ! command -v grun >/dev/null 2>&1 || ! command -v file >/dev/null 2>&1; then
+    if ! command -v glibc-runner >/dev/null 2>&1 || ! command -v file >/dev/null 2>&1; then
       pkg install -y glibc-repo file
       pkg install -y glibc-runner
     fi
