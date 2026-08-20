@@ -124,7 +124,6 @@ class MainActivity : Activity() {
     private var nextRuntimeProbe = 0L
     private var termuxHealthCheckInFlight = false
     private var termuxHealthCheckGeneration = 0
-    private var suppressServiceToggles = false
     private val runtimeProbeInFlight = AtomicBoolean(false)
     private val statusExecutor = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
@@ -337,18 +336,17 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.web_open_setup).setOnClickListener { navigate(Destination.SETUP) }
         findViewById<Button>(R.id.web_open_external).setOnClickListener { openExternal(repository.mainsailUrl()) }
-        klipperToggle.setOnCheckedChangeListener { _, enabled ->
-            if (suppressServiceToggles) return@setOnCheckedChangeListener
+        klipperToggle.setOnClickListener {
+            val enabled = klipperToggle.isChecked
             if (enabled) requestStartEverything() else confirmStopStack()
             renderServiceControls()
         }
-        sshToggle.setOnCheckedChangeListener { _, enabled ->
-            if (suppressServiceToggles) return@setOnCheckedChangeListener
-            requestSshState(enabled)
+        sshToggle.setOnClickListener {
+            requestSshState(sshToggle.isChecked)
         }
         findViewById<Switch>(R.id.auto_start_ssh).apply {
             isChecked = repository.sshAutoStart()
-            setOnCheckedChangeListener { button, enabled -> updateSshAutoStart(button, enabled) }
+            setOnClickListener { updateSshAutoStart(this, isChecked) }
         }
         findViewById<Button>(R.id.regenerate_token).setOnClickListener {
             repository.regenerateToken()
@@ -530,9 +528,7 @@ class MainActivity : Activity() {
     }
 
     private fun restoreSshAutoStartSwitch(button: CompoundButton, enabled: Boolean) {
-        button.setOnCheckedChangeListener(null)
         button.isChecked = enabled
-        button.setOnCheckedChangeListener { _, checked -> updateSshAutoStart(button, checked) }
     }
 
     private fun requestSshState(enabled: Boolean) {
@@ -1430,10 +1426,8 @@ class MainActivity : Activity() {
 
     private fun renderServiceControls() {
         val klipperRunning = moonrakerRunning || BridgeState.snapshots().isNotEmpty()
-        suppressServiceToggles = true
         klipperToggle.isChecked = klipperRunning
         sshToggle.isChecked = sshRunning
-        suppressServiceToggles = false
         klipperControlRow.setBackgroundResource(
             if (klipperRunning) R.drawable.bg_service_running else R.drawable.bg_service_stopped,
         )

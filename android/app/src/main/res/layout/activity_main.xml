@@ -294,11 +294,11 @@
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/stack_description" />
                         <LinearLayout android:id="@+id/klipper_control_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="11dp" android:background="@drawable/bg_service_stopped" android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="14dp" android:paddingRight="8dp">
                             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-medium" android:text="@string/klipper_stack" android:textColor="@color/mainsail_text_primary" android:textSize="15sp" />
-                            <Switch android:id="@+id/klipper_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_everything" android:showText="false" />
+                            <Switch android:id="@+id/klipper_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_everything" android:saveEnabled="false" android:showText="false" />
                         </LinearLayout>
                         <LinearLayout android:id="@+id/ssh_control_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:background="@drawable/bg_service_stopped" android:gravity="center_vertical" android:orientation="horizontal" android:paddingLeft="14dp" android:paddingRight="8dp">
                             <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:fontFamily="sans-serif-medium" android:text="SSH" android:textColor="@color/mainsail_text_primary" android:textSize="15sp" />
-                            <Switch android:id="@+id/ssh_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_ssh" android:showText="false" />
+                            <Switch android:id="@+id/ssh_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:contentDescription="@string/start_ssh" android:saveEnabled="false" android:showText="false" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
@@ -510,7 +510,7 @@
                     <TextView style="@style/PanelHeaderStandalone" android:text="@string/step_ssh" />
                     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="@drawable/bg_panel_body" android:orientation="vertical" android:padding="14dp">
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/auto_start_ssh_description" />
-                        <Switch android:id="@+id/auto_start_ssh" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/auto_start_ssh" android:textColor="@color/mainsail_text_primary" />
+                        <Switch android:id="@+id/auto_start_ssh" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:saveEnabled="false" android:text="@string/auto_start_ssh" android:textColor="@color/mainsail_text_primary" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
