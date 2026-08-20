@@ -21,6 +21,7 @@ Usage: klctl firmware COMMAND
   toolchain-status                 Check for arm-none-eabi-gcc
   toolchain-install                Install/download the configured toolchain
   build PROFILE                    Build and publish firmware
+  build-export PROFILE TARGET      Build, then export/share in one visible job
   list                             List published builds
   publish BUILD_ID                 Republish a completed build
   url BUILD_ID                     Print local and LAN download URLs
@@ -223,6 +224,26 @@ build_firmware() (
   printf 'Build complete: %s\nSHA-256: %s\n' "$build_id" "$hash"
 )
 
+build_and_export() {
+  local profile="$1" destination="$2" transcript build_id
+  valid_id "$profile" || die "invalid profile id"
+  case "$destination" in
+    web|downloads|share) ;;
+    /storage/[A-Za-z0-9._-]*) [[ "$destination" != */*/*/* ]] || die "invalid export destination" ;;
+    *) die "invalid export destination" ;;
+  esac
+  transcript=$(mktemp "$HOME_DIR/.cache/k4a-firmware-build.XXXXXX")
+  trap 'rm -f -- "$transcript"' RETURN
+  build_firmware "$profile" | tee "$transcript"
+  build_id=$(sed -n 's/^Build complete: //p' "$transcript" | tail -n 1)
+  valid_id "$build_id" || die "build completed without a valid build id"
+  case "$destination" in
+    web) printf 'Firmware is ready on the Mainsail firmware downloads page.\n' ;;
+    share) share_build "$build_id" ;;
+    *) export_build "$build_id" "$destination" ;;
+  esac
+}
+
 resolve_build() {
   valid_id "$1" || die "invalid build id"
   [[ -f "$BUILD_ROOT/$1/manifest.properties" ]] || die "unknown build: $1"
@@ -320,6 +341,7 @@ case "$command" in
   toolchain-status) [[ $# -eq 1 ]] || die "toolchain-status takes no arguments"; toolchain_status ;;
   toolchain-install) [[ $# -eq 1 ]] || die "toolchain-install takes no arguments"; install_toolchain ;;
   build) [[ $# -eq 2 ]] || die "build requires PROFILE"; build_firmware "$2" ;;
+  build-export) [[ $# -eq 3 ]] || die "build-export requires PROFILE and TARGET"; build_and_export "$2" "$3" ;;
   list) find "$PUBLISH_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort -r ;;
   publish) [[ $# -eq 2 ]] || die "publish requires BUILD_ID"; publish_build "$2" ;;
   url) [[ $# -eq 2 ]] || die "url requires BUILD_ID"; build_urls "$2" ;;

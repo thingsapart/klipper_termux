@@ -141,6 +141,44 @@ object TermuxRunner {
         )
     }
 
+    fun buildAndExportFirmware(
+        context: Context,
+        profileId: String,
+        destination: String,
+    ): Result {
+        require(profileId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,95}$")))
+        require(destination in setOf("web", "downloads", "share") ||
+            destination.matches(Regex("^/storage/[A-Za-z0-9._-]+$")))
+        val exportCommand = when (destination) {
+            "web" -> "printf 'Firmware is ready on the Mainsail firmware downloads page.\\n'"
+            "share" -> "'$KLCTL' firmware share \"${'$'}build_id\""
+            else -> "'$KLCTL' firmware export \"${'$'}build_id\" '$destination'"
+        }
+        // Deliberately compose commands supported by the first firmware-manager
+        // release. This lets a newly installed APK build against an older Termux
+        // installation without requiring UPDATE merely to gain an orchestration verb.
+        val command = "set -o pipefail; status=0; " +
+            "transcript=${'$'}(mktemp '$HOME/.cache/k4a-firmware-ui.XXXXXX'); " +
+            "'$KLCTL' firmware toolchain-install || status=${'$'}?; " +
+            "if [ \"${'$'}status\" -eq 0 ]; then " +
+            "'$KLCTL' firmware build '$profileId' | tee \"${'$'}transcript\"; " +
+            "status=${'$'}{PIPESTATUS[0]}; fi; " +
+            "if [ \"${'$'}status\" -eq 0 ]; then " +
+            "build_id=${'$'}(sed -n 's/^Build complete: //p' \"${'$'}transcript\" | tail -n 1); " +
+            "if [[ \"${'$'}build_id\" =~ ^[a-z0-9][a-z0-9._-]{0,95}${'$'} ]]; then " +
+            "$exportCommand || status=${'$'}?; else printf 'Could not determine build ID.\\n' >&2; status=2; fi; fi; " +
+            "rm -f -- \"${'$'}transcript\"; " +
+            "printf '\\nFirmware job finished (exit %s).\\n' \"${'$'}status\"; exec '$SHELL' -l"
+        return dispatch(
+            context,
+            SHELL,
+            arrayOf("-lc", command),
+            background = false,
+            commandLabel = "Build MCU firmware",
+            commandDescription = "Install the toolchain, build firmware, and export it",
+        )
+    }
+
     fun exportFirmware(
         context: Context,
         buildId: String,

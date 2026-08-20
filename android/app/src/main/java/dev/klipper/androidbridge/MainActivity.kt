@@ -915,10 +915,29 @@ class MainActivity : Activity() {
         firmwareBuildButton.isEnabled = false
         firmwareBuildButton.text = "Building…"
         firmwareBuildStatus.text = "Building ${profile.board} ${profile.revision}. The first build may download a compiler."
-        val dispatch = TermuxRunner.buildFirmware(this, profile.id) { result ->
-            runOnUiThread { handleFirmwareBuildResult(destination, result) }
+        val exportTarget = when (destination.id) {
+            "web", "share" -> destination.id
+            else -> destination.argument
         }
-        if (dispatch != TermuxRunner.Result.SENT) {
+        val dispatch = TermuxRunner.buildAndExportFirmware(this, profile.id, exportTarget)
+        if (dispatch == TermuxRunner.Result.SENT) {
+            repository.markFirmwareSetupHandled()
+            finishFirmwareAction(
+                "Firmware build and ${destination.label} export started in Termux. Return here when it finishes.",
+            )
+            // Match the installer/update flow: Android 10+ commonly prevents the
+            // RunCommandService from bringing its terminal activity forward itself.
+            // This launch is directly attributable to the user's build-button tap.
+            handler.postDelayed({
+                if (!TermuxRunner.openApp(this)) {
+                    Toast.makeText(
+                        this,
+                        "Open Termux to view the firmware build",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }, 400)
+        } else {
             finishFirmwareAction("Could not start the firmware build")
             handleTermuxResult(dispatch, "Firmware build requested")
         }

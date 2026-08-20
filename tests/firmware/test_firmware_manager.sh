@@ -95,6 +95,10 @@ build_id=$(sed -n 's/^Build complete: //p' <<<"$output")
 [[ -f "$DATA_DIR/gcodes/firmware/index.html" ]]
 grep -q "$build_id" "$DATA_DIR/gcodes/firmware/index.html"
 
+combined_output=$(/bin/bash "$MANAGER" build-export btt-skr-pico-v1 web)
+grep -q '^Build complete: btt-skr-pico-v1-' <<<"$combined_output"
+grep -q 'ready on the Mainsail firmware downloads page' <<<"$combined_output"
+
 destination="$TMP/card"
 /bin/bash "$MANAGER" export "$build_id" "$destination"
 [[ $(<"$destination/firmware.bin") == bin ]]
