@@ -483,10 +483,8 @@
                         <Button android:id="@+id/open_setup_wizard" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="@string/install_and_setup" />
                         <Button android:id="@+id/update_klipper" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/update_klipper" />
                         <TextView style="@style/MainsailBodyText" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/firmware_description" />
-                        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="horizontal">
-                            <Button android:id="@+id/build_mcu_firmware" style="@style/MainsailButtonPrimary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginEnd="4dp" android:layout_weight="1" android:text="@string/build_mcu_firmware" />
-                            <Button android:id="@+id/open_firmware_builds" style="@style/MainsailButtonSecondary" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1" android:text="@string/firmware_builds" />
-                        </LinearLayout>
+                        <Button android:id="@+id/build_mcu_firmware" style="@style/MainsailButtonPrimary" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/build_mcu_firmware" />
+                        <Button android:id="@+id/open_firmware_builds" style="@style/MainsailButtonSecondary" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/firmware_builds" />
                     </LinearLayout>
                 </LinearLayout>
                 <LinearLayout style="@style/WizardStep">

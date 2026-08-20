@@ -82,11 +82,11 @@
     <string name="step_firmware">5  Build controller firmware</string>
     <string name="step_ssh">6  Optional SSH access</string>
     <string name="step_verify">7  Start and verify</string>
-    <string name="firmware_step_description">Select the exact controller revision and where to put the result. Every build is also available from the Firmware downloads page.</string>
+    <string name="firmware_step_description">Select the exact controller revision and where to put the result. The checked profile replaces menuconfig, and the required compiler is installed automatically. Every build is also available from Firmware downloads.</string>
     <string name="firmware_profile">Controller board and revision</string>
     <string name="firmware_destination">Installation or export method</string>
     <string name="refresh_firmware_options">Refresh boards and storage</string>
-    <string name="build_and_export_firmware">Build and export firmware</string>
+    <string name="build_and_export_firmware">Build MCU firmware</string>
     <string name="skip_firmware">Already flashed / skip</string>
     <string name="firmware_options_loading">Reading firmware profiles and storage from Termux…</string>
     <string name="permission_step_description">Termux requires two explicit approvals: enable external apps inside Termux once, then grant Android’s command permission to this companion app.</string>

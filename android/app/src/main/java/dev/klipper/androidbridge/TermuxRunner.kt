@@ -57,6 +57,9 @@ object TermuxRunner {
         path: String,
         arguments: Array<String>,
         callback: (CommandResult) -> Unit,
+        background: Boolean = true,
+        commandLabel: String? = null,
+        commandDescription: String? = null,
     ): Result {
         val requestId = nextRequestId.getAndIncrement()
         val resultIntent = Intent(context, TermuxResultReceiver::class.java)
@@ -69,6 +72,9 @@ object TermuxRunner {
             context,
             path,
             arguments,
+            background = background,
+            commandLabel = commandLabel,
+            commandDescription = commandDescription,
             resultPendingIntent = pendingIntent,
         )
         if (result != Result.SENT) resultCallbacks.remove(requestId)
@@ -112,18 +118,6 @@ object TermuxRunner {
             commandDescription = "Update Klipper, Moonraker, Mainsail, and bridge services",
         )
 
-    fun openFirmwareConsole(context: Context): Result = dispatch(
-        context,
-        SHELL,
-        arrayOf(
-            "-lc",
-            "'$KLCTL' firmware profiles; printf '\\nBuild with: klctl firmware build PROFILE\\nList builds with: klctl firmware list\\n\\n'; exec '$SHELL' -l",
-        ),
-        background = false,
-        commandLabel = "Build MCU firmware",
-        commandDescription = "Select and build a Klipper controller firmware profile",
-    )
-
     fun firmwareProfiles(context: Context, callback: (CommandResult) -> Unit): Result =
         dispatchForResult(context, KLCTL, arrayOf("firmware", "profiles-machine"), callback)
 
@@ -136,7 +130,15 @@ object TermuxRunner {
         callback: (CommandResult) -> Unit,
     ): Result {
         require(profileId.matches(Regex("^[a-z0-9][a-z0-9._-]{0,95}$")))
-        return dispatchForResult(context, KLCTL, arrayOf("firmware", "build", profileId), callback)
+        return dispatchForResult(
+            context,
+            KLCTL,
+            arrayOf("firmware", "build", profileId),
+            callback,
+            background = false,
+            commandLabel = "Build MCU firmware",
+            commandDescription = "Install the required toolchain and build the selected Klipper firmware",
+        )
     }
 
     fun exportFirmware(

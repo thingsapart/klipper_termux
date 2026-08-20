@@ -177,7 +177,11 @@ build_firmware() (
   line=$(profile_line "$profile") || die "unknown profile: $profile"
   IFS='|' read -r id name revision transport artifact required method flash_board config reference <<<"$line"
   [[ -d "$KLIPPER_DIR/.git" && -f "$KLIPPER_DIR/Makefile" ]] || die "Klipper source not found at $KLIPPER_DIR"
-  compiler=$(find_compiler)
+  if ! compiler=$(find_compiler 2>/dev/null); then
+    printf 'Required ARM toolchain is missing; installing it now...\n'
+    install_toolchain
+    compiler=$(find_compiler)
+  fi
   export PATH="$(dirname "$compiler"):$PATH"
   commit=$(git -C "$KLIPPER_DIR" rev-parse HEAD)
   short=${commit:0:8}

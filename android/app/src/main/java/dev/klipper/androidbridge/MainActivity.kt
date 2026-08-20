@@ -264,10 +264,7 @@ class MainActivity : Activity() {
         drawerSettings.setOnClickListener { selectFromDrawer(Destination.SETTINGS) }
         findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { navigate(Destination.SETUP) }
         findViewById<Button>(R.id.build_mcu_firmware).setOnClickListener {
-            handleTermuxResult(
-                TermuxRunner.openFirmwareConsole(this),
-                "Firmware build console opened in Termux",
-            )
+            openFirmwareBuilder()
         }
         findViewById<Button>(R.id.open_firmware_builds).setOnClickListener {
             val firmwareUrl = Uri.parse(repository.mainsailUrl()).buildUpon()
@@ -869,6 +866,15 @@ class MainActivity : Activity() {
             firmwareBuildButton.isEnabled = false
             handleTermuxResult(destinationDispatch, "Firmware storage scan requested")
         }
+    }
+
+    private fun openFirmwareBuilder() {
+        navigate(Destination.SETUP)
+        wizardBodies.forEachIndexed { index, body ->
+            body.visibility = if (index == FIRMWARE_WIZARD_STEP) View.VISIBLE else View.GONE
+        }
+        lastNextWizardStep = FIRMWARE_WIZARD_STEP
+        if (!firmwareOptionsLoading && !firmwareBuildRunning) refreshFirmwareOptions()
     }
 
     private fun updateFirmwareAdapters() {
@@ -1750,6 +1756,7 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val FIRMWARE_WIZARD_STEP = 4
         private const val KEY_DESTINATION = "destination"
         private const val KEY_PRIMARY = "primary_destination"
         private const val KEY_WEB_STATE = "web_state"

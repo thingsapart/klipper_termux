@@ -52,9 +52,19 @@ if [[ "${1:-}" == -c ]]; then
 fi
 exec shasum -a 256 "$@"
 EOF
+cat >"$FAKE_BIN/apt-cache" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == show && "${2:-}" == gcc-arm-none-eabi ]]
+EOF
+cat >"$FAKE_BIN/pkg" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == install && "${2:-}" == -y && "${3:-}" == gcc-arm-none-eabi ]]
+mv -- "$FAKE_BIN/arm-none-eabi-gcc.pending" "$FAKE_BIN/arm-none-eabi-gcc"
+EOF
 chmod +x "$FAKE_BIN"/*
 
 export PATH="$FAKE_BIN:/usr/bin:/bin"
+export FAKE_BIN
 export K4A_HOME_DIR="$HOME_DIR"
 export K4A_PREFIX="$PREFIX"
 export K4A_DATA_DIR="$DATA_DIR"
@@ -76,7 +86,9 @@ info=$(/bin/bash "$MANAGER" info btt-octopus-pro-h723-v11)
 grep -q 'STM32H723' <<<"$info"
 grep -q 'CONFIG_STM32_FLASH_START_20000=y' <<<"$info"
 
+mv "$FAKE_BIN/arm-none-eabi-gcc" "$FAKE_BIN/arm-none-eabi-gcc.pending"
 output=$(/bin/bash "$MANAGER" build btt-skr-mini-e3-v3)
+[[ -x "$FAKE_BIN/arm-none-eabi-gcc" ]]
 build_id=$(sed -n 's/^Build complete: //p' <<<"$output")
 [[ -n "$build_id" ]]
 [[ -f "$DATA_DIR/gcodes/firmware/$build_id/firmware.bin" ]]

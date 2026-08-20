@@ -84,6 +84,10 @@ then build and either publish it to the Mainsail firmware page, copy it to
 Downloads or a detected `/storage/...` card, or open Android's Share sheet.
 Read-only removable volumes remain visible but cannot be selected for export.
 Building is optional for controllers that are already flashed.
+The Settings **Build MCU firmware** button opens this same wizard step rather
+than a separate `menuconfig` shell. Its checked-in board profile supplies the
+Kconfig, and the visible Termux build automatically installs the required ARM
+toolchain when it is missing.
 
 The setup wizard includes optional SSH access. **Install and configure SSH**
 opens a visible Termux session, installs `openssh`, and runs `passwd` there; the
