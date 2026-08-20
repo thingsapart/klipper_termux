@@ -93,7 +93,7 @@ toolchain_status() {
   "$compiler" --version | head -n 1
 }
 
-install_toolchain() {
+install_toolchain() (
   command -v arm-none-eabi-gcc >/dev/null 2>&1 && { toolchain_status; return; }
   if apt-cache show gcc-arm-none-eabi >/dev/null 2>&1; then
     pkg install -y gcc-arm-none-eabi
@@ -111,7 +111,7 @@ install_toolchain() {
     *) die "no Android toolchain is configured for architecture $arch" ;;
   esac
   [[ -n "$url" && "$checksum" =~ ^[0-9a-fA-F]{64}$ ]] || die "this release has no checksum-pinned Bionic toolchain for $arch; install arm-none-eabi-gcc manually or configure K4A_ARM_TOOLCHAIN_*_URL and _SHA256"
-  mkdir -p "$HOME_DIR/.cache/k4a/toolchains"
+  mkdir -p "$HOME_DIR/.cache/k4a/toolchains" "$(dirname "$destination")"
   archive="$HOME_DIR/.cache/k4a/toolchains/$checksum.tar.xz"
   partial="$archive.part"
   staging=$(mktemp -d "$HOME_DIR/.cache/k4a-toolchain.XXXXXX")
@@ -146,7 +146,7 @@ install_toolchain() {
   else
     printf '[2/4] Using cached, verified toolchain archive.\n'
   fi
-  printf '[3/4] Extracting the toolchain for Android storage…\n'
+  printf '[3/4] Extracting the toolchain…\n'
   python "$LIB_DIR/extract_toolchain.py" "$archive" "$staging"
   [[ -x "$staging/bin/arm-none-eabi-gcc" ]] || die "toolchain archive has no bin/arm-none-eabi-gcc"
   if [[ "$arch" == aarch64 || "$arch" == arm64 ]]; then
@@ -166,10 +166,13 @@ install_toolchain() {
   "$staging/bin/arm-none-eabi-gcc" --version >/dev/null || die "downloaded toolchain failed its execution check"
   rm -rf -- "$destination.previous"
   [[ -d "$destination" ]] && mv -- "$destination" "$destination.previous"
-  mv -- "$staging" "$destination"
+  if ! mv -- "$staging" "$destination"; then
+    [[ ! -d "$destination.previous" ]] || mv -- "$destination.previous" "$destination"
+    die "could not install the extracted toolchain"
+  fi
   rm -rf -- "$destination.previous"
   toolchain_status
-}
+)
 
 assert_not_printing() {
   local response

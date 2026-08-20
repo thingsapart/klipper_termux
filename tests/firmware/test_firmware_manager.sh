@@ -29,6 +29,16 @@ echo 0123456789abcdef0123456789abcdef01234567
 EOF
 cat >"$FAKE_BIN/curl" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n "${K4A_TEST_ARCHIVE:-}" ]]; then
+  destination=''
+  while (($#)); do
+    if [[ "$1" == -o ]]; then shift; destination="$1"; fi
+    shift
+  done
+  [[ -n "$destination" ]] || exit 2
+  cp -- "$K4A_TEST_ARCHIVE" "$destination"
+  exit
+fi
 exit 1
 EOF
 cat >"$FAKE_BIN/make" <<'EOF'
@@ -55,12 +65,19 @@ exec shasum -a 256 "$@"
 EOF
 cat >"$FAKE_BIN/apt-cache" <<'EOF'
 #!/usr/bin/env bash
+[[ -z "${K4A_TEST_NO_APT:-}" ]] || exit 1
 [[ "${1:-}" == show && "${2:-}" == gcc-arm-none-eabi ]]
 EOF
 cat >"$FAKE_BIN/pkg" <<'EOF'
 #!/usr/bin/env bash
-[[ "${1:-}" == install && "${2:-}" == -y && "${3:-}" == gcc-arm-none-eabi ]]
-mv -- "$FAKE_BIN/arm-none-eabi-gcc.pending" "$FAKE_BIN/arm-none-eabi-gcc"
+[[ "${1:-}" == install && "${2:-}" == -y ]] || exit 1
+if [[ "${3:-}" == gcc-arm-none-eabi ]]; then
+  mv -- "$FAKE_BIN/arm-none-eabi-gcc.pending" "$FAKE_BIN/arm-none-eabi-gcc"
+fi
+EOF
+cat >"$FAKE_BIN/python" <<'EOF'
+#!/usr/bin/env bash
+exec /usr/bin/python3 "$@"
 EOF
 chmod +x "$FAKE_BIN"/*
 
@@ -86,6 +103,29 @@ python3 "$LIB_DIR/extract_toolchain.py" "$TMP/toolchain.tar.xz" "$TMP/extracted"
   echo 'extractor recreated a hard link instead of copying its contents' >&2
   exit 1
 }
+
+# The downloaded-toolchain path must create a first-install destination and its
+# cleanup trap must retain the function-local staging path until shell exit.
+mkdir -p "$TMP/minimal/toolchain/bin"
+cp "$FAKE_BIN/arm-none-eabi-gcc" "$TMP/minimal/toolchain/bin/arm-none-eabi-gcc"
+tar -cJf "$TMP/minimal-toolchain.tar.xz" -C "$TMP/minimal" toolchain
+minimal_checksum=$(/usr/bin/shasum -a 256 "$TMP/minimal-toolchain.tar.xz" | awk '{print $1}')
+cat >"$FAKE_BIN/uname" <<'EOF'
+#!/usr/bin/env bash
+[[ "${1:-}" == -m ]] && { printf 'aarch64\n'; exit; }
+exec /usr/bin/uname "$@"
+EOF
+chmod +x "$FAKE_BIN/uname"
+mv "$FAKE_BIN/arm-none-eabi-gcc" "$FAKE_BIN/arm-none-eabi-gcc.pending"
+fallback_output=$(K4A_TEST_NO_APT=1 K4A_TEST_ARCHIVE="$TMP/minimal-toolchain.tar.xz" \
+  K4A_ARM_TOOLCHAIN_AARCH64_URL=https://example.invalid/minimal-toolchain.tar.xz \
+  K4A_ARM_TOOLCHAIN_AARCH64_SHA256="$minimal_checksum" \
+  /bin/bash "$MANAGER" toolchain-install)
+grep -q 'arm-none-eabi-gcc fake 1.0' <<<"$fallback_output"
+[[ -x "$HOME_DIR/.local/opt/k4a-arm-toolchain/bin/arm-none-eabi-gcc" ]]
+rm -rf -- "$HOME_DIR/.local/opt/k4a-arm-toolchain"
+mv "$FAKE_BIN/arm-none-eabi-gcc.pending" "$FAKE_BIN/arm-none-eabi-gcc"
+rm -f -- "$FAKE_BIN/uname"
 
 profiles=$(/bin/bash "$MANAGER" profiles)
 grep -q btt-octopus-f446-v1 <<<"$profiles"
