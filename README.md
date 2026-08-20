@@ -37,6 +37,17 @@ scripts/build-app.sh
 scripts/build-and-upload-app.sh [--serial DEVICE_SERIAL]
 ```
 
+Standalone offline Klipper Configurator:
+
+```sh
+scripts/build-configurator-app.sh
+```
+
+The standalone APK shares its pure Kotlin generator and Android wizard with the
+bridge app. It needs no USB, Termux, network, or storage permission: Android's
+document picker exports a versioned ZIP to Downloads (or another user-selected
+location) and can reopen its own exported projects for continued editing.
+
 Release/distribution builds can embed the published one-tap Termux installer
 locations without editing source. If `origin` is a GitHub SSH or HTTPS URL,
 both build scripts derive these first two values automatically; explicit values

@@ -49,6 +49,9 @@
     <string name="download_sources">Download sources</string>
     <string name="install_and_setup">Install and Setup Klipper</string>
     <string name="install_and_setup_description">Open the guided checklist. Completed steps collapse automatically and the next action is highlighted.</string>
+    <string name="printer_configurator">Printer Configurator</string>
+    <string name="printer_configurator_description">Create an offline, editable Klipper configuration bundle from independent mechanics, controller, driver, probe, feature, and plugin choices.</string>
+    <string name="open_printer_configurator">Open Printer Configurator</string>
     <string name="setup_klipper">Install and Setup Klipper</string>
     <string name="setup_progress_initial">Checking this device…</string>
     <string name="step_termux">1  Install Termux</string>

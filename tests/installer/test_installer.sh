@@ -198,6 +198,8 @@ grep -q '^device=main,auto,250000,8,1,none,dtr+rts,' \
   "$ROOT/installer/config/bridge.conf.example"
 grep -q 'migrate legacy bridge flags to dtr+rts' "$ROOT/installer/install.sh"
 grep -q 'migrate generated bridge selector from offline to auto' "$ROOT/installer/install.sh"
+grep -q 'Repairing previously configured SSH service' "$ROOT/installer/install.sh"
+grep -q '"\$SSH_SETUP_MARKER" -nt "\$SSH_DOWN_FILE"' "$ROOT/installer/install.sh"
 migrated_bridge_line="$(printf '%s\n' \
   'device=main,offline,250000,8,1,none,dtr+rts,/tmp/main' | \
   sed -E 's#^(device=main,)offline(,250000,8,1,none,(none|dtr\+rts),.*)$#\1auto\2#')"
@@ -283,6 +285,12 @@ grep -q '^# user-owned$' "$hostname_home/printer_data/config/printer.cfg"
 grep -q 'pkg install -y openssh' "$ROOT/installer/kabctl"
 grep -q 'Port 2020' "$ROOT/installer/kabctl"
 grep -q '^[[:space:]]*passwd$' "$ROOT/installer/kabctl"
+grep -q 'SVDIR="\$PREFIX/var/service" sv-enable sshd' "$ROOT/installer/kabctl"
+grep -q 'telnet://127.0.0.1:2020' "$ROOT/installer/kabctl"
+if grep -q 'ss -ltn' "$ROOT/installer/kabctl"; then
+  echo "kabctl doctor still relies on Android-restricted socket diagnostics" >&2
+  exit 1
+fi
 grep -q 'starter-config-installed' "$ROOT/installer/install.sh"
 grep -q 'A real printer.cfg is user data and must never be replaced by UPDATE' \
   "$ROOT/installer/install.sh"

@@ -17,4 +17,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "KlipperAndroidBridge"
 include(":android:app")
-
+include(":android:configurator-core")
+include(":android:configurator-ui")
+include(":android:configurator-app")

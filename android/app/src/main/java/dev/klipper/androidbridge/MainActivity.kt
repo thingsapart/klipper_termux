@@ -49,6 +49,9 @@ import dev.klipper.androidbridge.bridge.UsbBridgeService
 import dev.klipper.androidbridge.bridge.UsbSerialDiscovery
 import dev.klipper.androidbridge.bridge.UsbSerialDriverKind
 import dev.klipper.androidbridge.bridge.toHex
+import dev.klipper.configurator.ui.ConfiguratorActivity
+import dev.klipper.configurator.ui.ConfiguratorHost
+import dev.klipper.configurator.ui.ConfiguratorHostRegistry
 import java.util.UUID
 
 class MainActivity : Activity() {
@@ -210,6 +213,22 @@ class MainActivity : Activity() {
         drawerMainsail.setOnClickListener { selectFromDrawer(Destination.MAINSAIL) }
         drawerSettings.setOnClickListener { selectFromDrawer(Destination.SETTINGS) }
         findViewById<Button>(R.id.open_setup_wizard).setOnClickListener { navigate(Destination.SETUP) }
+        findViewById<Button>(R.id.open_printer_configurator).setOnClickListener {
+            ConfiguratorHostRegistry.host = object : ConfiguratorHost {
+                override val label = "this phone's Termux"
+                override fun applyBundle(zip: ByteArray): String = when (TermuxRunner.applyConfigBundle(this@MainActivity, zip)) {
+                    TermuxRunner.Result.SENT -> "Config apply requested; Termux will back up, validate, and restart safely"
+                    TermuxRunner.Result.PERMISSION_REQUIRED -> "Grant the Termux command permission, then try again"
+                    TermuxRunner.Result.TERMUX_UNAVAILABLE -> "Termux is unavailable or external commands are disabled"
+                }
+                override fun rollback(): String = when (TermuxRunner.rollbackConfig(this@MainActivity)) {
+                    TermuxRunner.Result.SENT -> "Config rollback requested"
+                    TermuxRunner.Result.PERMISSION_REQUIRED -> "Grant the Termux command permission, then try again"
+                    TermuxRunner.Result.TERMUX_UNAVAILABLE -> "Termux is unavailable or external commands are disabled"
+                }
+            }
+            startActivity(Intent(this, ConfiguratorActivity::class.java))
+        }
         wizardHeaders.forEachIndexed { index, header ->
             header.setOnClickListener {
                 wizardBodies[index].visibility = if (

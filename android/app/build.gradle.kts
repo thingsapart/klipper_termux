@@ -78,6 +78,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":android:configurator-ui"))
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("com.github.mik3y:usb-serial-for-android:3.11.0")
     testImplementation("junit:junit:4.13.2")

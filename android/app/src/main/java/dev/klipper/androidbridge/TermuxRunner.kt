@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Base64
 
 /** Isolated adapter for Termux's documented, permission-protected RUN_COMMAND API. */
 object TermuxRunner {
@@ -65,6 +66,13 @@ object TermuxRunner {
 
     fun createStarterConfig(context: Context): Result =
         dispatch(context, KABCTL, arrayOf("printer-starter"))
+
+    fun applyConfigBundle(context: Context, zip: ByteArray): Result {
+        require(zip.size <= 96 * 1024) { "Configuration bundle is too large for Termux command transport" }
+        return dispatch(context, KABCTL, arrayOf("config-apply", Base64.encodeToString(zip, Base64.NO_WRAP)))
+    }
+
+    fun rollbackConfig(context: Context): Result = dispatch(context, KABCTL, arrayOf("config-rollback"))
 
     fun setupSsh(context: Context): Result = dispatch(
         context,

@@ -80,6 +80,9 @@ UPDATE to install Moonraker's Android compatibility launcher.
 ## SSH setup or connection fails
 
 - Run `kabctl ssh-setup` in Termux and complete both password prompts.
+- Run UPDATE if an app-launched SSH setup created its completion marker but
+  left `$PREFIX/var/service/sshd/down` in place. The setup command now supplies
+  runit's service directory explicitly and records completion only after start.
 - Connect with the Termux username printed by the command, not the Android
   device owner's name: `ssh -p 2020 USER@PHONE_LAN_IP`.
 - Confirm `kabctl doctor` reports **SSH server on port 2020** after setup.

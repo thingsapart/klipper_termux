@@ -577,6 +577,18 @@ install_command_link klipper-android-bridge
 install_command_link klipper-android-runner
 install_command_link kabctl
 
+# Older app-launched ssh-setup runs did not export SVDIR to sv-enable. They
+# wrote the completion marker and then failed while the package's older `down`
+# file remained. Repair only that ordering; a newer down file represents an
+# intentional disable and must be preserved.
+SSH_SETUP_MARKER="$STATE_DIR/ssh-configured"
+SSH_DOWN_FILE="$PREFIX/var/service/sshd/down"
+if [[ -f "$SSH_SETUP_MARKER" && -f "$SSH_DOWN_FILE" && \
+      "$SSH_SETUP_MARKER" -nt "$SSH_DOWN_FILE" ]] && command -v sv-enable >/dev/null 2>&1; then
+  log "Repairing previously configured SSH service"
+  run env SVDIR="$PREFIX/var/service" sv-enable sshd
+fi
+
 if (( ENABLE_APP_CONTROL )); then
   log "Enabling permission-gated companion app control"
   TERMUX_PROPERTIES="$TERMUX_HOME/.termux/termux.properties"
