@@ -13,6 +13,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"
+        android:id="@+id/top_app_bar"
         android:background="#11151B"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -319,28 +320,51 @@
             </LinearLayout>
         </ScrollView>
 
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/mainsail_page"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#080A0E"
+            android:orientation="vertical"
             android:visibility="gone">
 
-            <FrameLayout
-                android:id="@+id/mainsail_container"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
             <LinearLayout
-                android:id="@+id/mainsail_error"
+                android:id="@+id/mainsail_reveal_handle"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:layout_margin="24dp"
-                android:background="@drawable/bg_panel_body"
-                android:orientation="vertical"
-                android:padding="20dp"
+                android:layout_height="28dp"
+                android:background="#080A0E"
+                android:clickable="true"
+                android:contentDescription="@string/show_navigation"
+                android:focusable="true"
+                android:gravity="center"
                 android:visibility="gone">
+
+                <View
+                    android:layout_width="34dp"
+                    android:layout_height="4dp"
+                    android:background="@drawable/bg_mainsail_reveal_handle" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <FrameLayout
+                    android:id="@+id/mainsail_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <LinearLayout
+                    android:id="@+id/mainsail_error"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_margin="24dp"
+                    android:background="@drawable/bg_panel_body"
+                    android:orientation="vertical"
+                    android:padding="20dp"
+                    android:visibility="gone">
 
                 <TextView
                     style="@style/MainsailCardTitle"
@@ -384,8 +408,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/open_in_browser" />
-            </LinearLayout>
-        </FrameLayout>
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
 
         <ScrollView
             android:id="@+id/setup_page"

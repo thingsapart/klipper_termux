@@ -23,6 +23,8 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -81,6 +83,7 @@ class MainActivity : Activity() {
     private lateinit var primaryToggle: ImageButton
     private lateinit var overflowButton: ImageButton
     private lateinit var webProgress: ProgressBar
+    private lateinit var mainsailRevealHandle: View
     private lateinit var mainsailContainer: FrameLayout
     private lateinit var mainsailError: View
     private lateinit var mainsailErrorMessage: TextView
@@ -164,7 +167,7 @@ class MainActivity : Activity() {
         setupPage = findViewById(R.id.setup_page)
         settingsPage = findViewById(R.id.settings_page)
         drawerLayout = findViewById(R.id.drawer_layout)
-        appBar = findViewById(R.id.app_bar)
+        appBar = findViewById(R.id.top_app_bar)
         appBar.setOnTouchListener { _, event ->
             if (event.actionMasked == MotionEvent.ACTION_DOWN && destination == Destination.MAINSAIL) {
                 scheduleMainsailAppBarHide(APP_BAR_VISIBLE_MS)
@@ -174,6 +177,11 @@ class MainActivity : Activity() {
         primaryToggle = findViewById(R.id.primary_toggle)
         overflowButton = findViewById(R.id.overflow_button)
         webProgress = findViewById(R.id.web_progress)
+        mainsailRevealHandle = findViewById(R.id.mainsail_reveal_handle)
+        mainsailRevealHandle.setOnClickListener {
+            setMainsailAppBarVisible(true)
+            scheduleMainsailAppBarHide(APP_BAR_VISIBLE_MS)
+        }
         mainsailContainer = findViewById(R.id.mainsail_container)
         mainsailError = findViewById(R.id.mainsail_error)
         mainsailErrorMessage = findViewById(R.id.mainsail_error_message)
@@ -488,6 +496,8 @@ class MainActivity : Activity() {
         handler.post(refresh)
         if (destination == Destination.MAINSAIL && appBar.visibility == View.VISIBLE) {
             scheduleMainsailAppBarHide(INITIAL_APP_BAR_DELAY_MS)
+        } else if (destination == Destination.MAINSAIL) {
+            setMainsailFullscreen(true)
         }
     }
 
@@ -1364,6 +1374,8 @@ class MainActivity : Activity() {
     private fun setMainsailAppBarVisible(visible: Boolean, animate: Boolean = true) {
         appBar.animate().cancel()
         if (visible) {
+            setMainsailFullscreen(false)
+            mainsailRevealHandle.visibility = View.GONE
             if (appBar.visibility == View.VISIBLE && appBar.alpha == 1f) return
             appBar.visibility = View.VISIBLE
             if (!animate) {
@@ -1385,6 +1397,8 @@ class MainActivity : Activity() {
             appBar.visibility = View.GONE
             appBar.translationY = 0f
             appBar.alpha = 0f
+            mainsailRevealHandle.visibility = View.VISIBLE
+            setMainsailFullscreen(true)
             return
         }
         appBar.animate()
@@ -1392,10 +1406,41 @@ class MainActivity : Activity() {
             .alpha(0f)
             .setDuration(APP_BAR_ANIMATION_MS)
             .withEndAction {
-                if (destination == Destination.MAINSAIL) appBar.visibility = View.GONE
+                if (destination == Destination.MAINSAIL) {
+                    appBar.visibility = View.GONE
+                    mainsailRevealHandle.visibility = View.VISIBLE
+                    setMainsailFullscreen(true)
+                }
                 appBar.translationY = 0f
             }
             .start()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun setMainsailFullscreen(fullscreen: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(!fullscreen)
+            window.insetsController?.apply {
+                if (fullscreen) {
+                    systemBarsBehavior =
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    hide(WindowInsets.Type.systemBars())
+                } else {
+                    show(WindowInsets.Type.systemBars())
+                }
+            }
+            return
+        }
+        window.decorView.systemUiVisibility = if (fullscreen) {
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        } else {
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        }
     }
 
     private fun loadMainsail() {
@@ -1793,7 +1838,7 @@ class MainActivity : Activity() {
         private const val MENU_SETUP = 1
         private const val MENU_RELOAD = 2
         private const val MENU_BROWSER = 3
-        private const val INITIAL_APP_BAR_DELAY_MS = 500L
+        private const val INITIAL_APP_BAR_DELAY_MS = 1_500L
         private const val APP_BAR_VISIBLE_MS = 10_000L
         private const val APP_BAR_ANIMATION_MS = 220L
         private const val APP_BAR_REVEAL_EDGE_DP = 48
