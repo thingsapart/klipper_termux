@@ -158,6 +158,19 @@ only the selected revision is fetched, rather than the projects' full Git
 history. Python dependencies use pip without retaining downloaded-wheel caches,
 and the Mainsail archive is deleted after extraction.
 
+### The one Klipper patch
+
+Install and UPDATE apply one Android-only build-time patch to Klipper's native
+helper. [Upstream Klipper](https://github.com/Klipper3d/klipper/blob/master/klippy/chelper/pyhelper.c#L18)
+uses `CLOCK_MONOTONIC_RAW` for host timestamps, but some legacy Android kernels
+return invalid or non-monotonic values for that clock. That corrupts Klipper's
+MCU clock model and can cause `Timer too close` despite clean serial traffic.
+
+The launcher redirects only RAW clock requests to `CLOCK_MONOTONIC`, which is
+reliable on those kernels. It does not change Klipper's protocol, scheduling,
+motion code, or MCU firmware, and leaves the upstream checkout unchanged. A
+versioned marker forces existing installations to rebuild `c_helper.so` once.
+
 Rerunning the installer detects an existing managed installation and asks for
 `UPDATE` or `DELETE` in the Termux terminal. Update stops the running stack,
 checks the bridge project for a newer revision, and fetches Klipper or Moonraker
@@ -180,9 +193,9 @@ files. Automation may pass `--update` or `--reinstall` explicitly;
 Installer output is appended to
 `~/.local/state/klipper-android/installer.log` (rotated after 1 MiB). Inspect it
 with `klctl installer-log`; failed commands include their approximate script
-line and exit status. Klipper is launched through a small compatibility shim
-that ignores only Android's denial of `chmod(0660)` on a Klipper-created
-`/dev/pts/*` node. Other permission errors are preserved.
+line and exit status. Klipper's compatibility shim applies that clock patch and
+ignores only Android's denial of `chmod(0660)` on a Klipper-created `/dev/pts/*`
+node. Other permission errors are preserved.
 The optional Klipper G-code terminal is published below Termux's writable
 `$PREFIX/var/run/klipper-android` directory instead of upstream's hard-coded
 `/tmp/printer` path.
