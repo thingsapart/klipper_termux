@@ -389,7 +389,10 @@ static void process_session_events(struct k4a_session *session,
         disconnect_session(session, "PTY read failed");
         return;
     }
-    if ((socket_events & POLLOUT) &&
+    /* All descriptors are nonblocking, so forward newly-read bytes in this
+     * same pass instead of waiting for poll() to report the destination in a
+     * second pass. EAGAIN simply leaves the bytes queued for POLLOUT. */
+    if (k4a_buffer_readable(&session->to_network) &&
         write_from(session->socket_fd, &session->to_network,
                    &session->stats.network_tx_bytes, &session->stats.write_calls, 1)) {
         disconnect_session(session, "network write failed");
@@ -405,7 +408,7 @@ static void process_session_events(struct k4a_session *session,
         }
         if (read_result > 0) session->remote_eof = 1;
     }
-    if ((pty_events & POLLOUT) &&
+    if (k4a_buffer_readable(&session->to_pty) &&
         write_from(session->pty_fd, &session->to_pty,
                    &session->stats.pty_tx_bytes, &session->stats.write_calls, 0)) {
         disconnect_session(session, "PTY write failed");

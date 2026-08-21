@@ -110,6 +110,35 @@ UPDATE to install Moonraker's Android compatibility launcher.
 
 Disable battery optimization for Termux and the companion app. Some vendors impose additional background restrictions even on foreground services. Keep the phone powered and test the exact model before unattended printing.
 
+## MCU shuts down with `Timer too close`
+
+`Timer too close` means the MCU was asked to schedule an event whose clock was
+already in the past. It is not, by itself, proof of a serial fault. Mainline
+Klipper keeps ordinary scheduled commands at least 100 ms ahead; motion is
+normally queued much farther ahead. Common causes are an overloaded MCU, a host
+pause, or communication delay/retransmission.
+
+- Update both the Android app and Termux bridge. Current versions run the two
+  USB forwarding threads at Android's latency-critical I/O priority, keep 32
+  packet-sized reads queued across short scheduler/GC pauses, and forward PTY
+  data in the same nonblocking event-loop pass.
+- In the app's USB device card, watch **Peak write**. A USB value approaching
+  100 ms points to the Android/USB path; a high socket value points to Termux or
+  Klipper not draining the loopback connection promptly. These are high-water
+  marks for the current connection and reset on reconnect.
+- Inspect the `Stats` lines immediately before shutdown in `klippy.log`.
+  Increasing `bytes_retransmit`, `bytes_invalid`, `srtt`, or `rttvar` implicates
+  communications. High `mcu_awake`/`mcu_task_avg`, especially after increasing
+  microsteps, speed, or pressure advance, implicates MCU load. A collapsing
+  `buffer_time` with host CPU or memory pressure implicates a host scheduling
+  stall.
+- Keep battery optimization disabled for both apps, use a powered OTG hub and
+  a short data cable, and avoid testing through an unpowered hub.
+
+Do not hide the symptom by changing Klipper's timing constants first. Capture
+the preceding `Stats` lines and the app's peak-write values so the failing layer
+can be identified.
+
 ## `klipper-android.local` does not resolve
 
 - Keep the companion bridge service running so it can hold Android's Wi-Fi

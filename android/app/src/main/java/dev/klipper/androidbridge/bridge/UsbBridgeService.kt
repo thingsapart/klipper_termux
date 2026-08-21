@@ -145,7 +145,10 @@ class UsbBridgeService : Service() {
             return false
         }
         return try {
-            port.setReadQueue(2, 0)
+            // Queue packet-sized USB reads before opening the port. Completed
+            // requests are returned one at a time, so a deeper queue tolerates
+            // Android scheduler/GC pauses without delaying the first packet.
+            port.setReadQueue(READ_QUEUE_PACKETS, 0)
             port.open(connection)
             port.setParameters(request.baud, request.dataBits, request.stopBits, request.parity)
             runCatching { port.dtr = request.flags and 1 != 0 }
@@ -274,6 +277,7 @@ class UsbBridgeService : Service() {
 
     companion object {
         const val ACTION_STOP = "dev.klipper.androidbridge.STOP"
+        private const val READ_QUEUE_PACKETS = 32
         private const val CHANNEL_ID = "bridge"
         private const val NOTIFICATION_ID = 1001
         fun pendingIntentFlags(): Int = PendingIntent.FLAG_UPDATE_CURRENT or

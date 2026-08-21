@@ -1,5 +1,7 @@
 package dev.klipper.androidbridge.bridge
 
+import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import java.io.Closeable
@@ -22,10 +24,12 @@ class UsbSession(
     }
 
     private fun usbToHostLoop() {
+        enterLatencyCriticalPriority()
         // A queued read must use exactly the queue buffer size. With size=0 in
         // setReadQueue(), usb-serial selects the endpoint's max packet size.
-        // Keeping two packet-sized requests queued minimizes attach-to-read
-        // latency without adding large buffers or a polling timeout.
+        // The queued requests complete independently; this is read-ahead, not
+        // batching. It keeps the USB controller receiving while Android pauses
+        // this thread briefly for scheduling or garbage collection.
         val readSize = port.readQueueBufferSize.takeIf { it > 0 } ?: BUFFER_SIZE
         val buffer = ByteArray(readSize)
         try {
@@ -33,7 +37,9 @@ class UsbSession(
             while (!closed.get()) {
                 val count = port.read(buffer, buffer.size, 0)
                 if (count <= 0) continue
+                val started = SystemClock.elapsedRealtimeNanos()
                 output.write(buffer, 0, count)
+                counters.recordMaxSocketWriteMicros(elapsedMicros(started))
                 counters.usbToHostBytes.addAndGet(count.toLong())
                 counters.usbReads.incrementAndGet()
                 counters.lastActivityMillis.set(System.currentTimeMillis())
@@ -46,6 +52,7 @@ class UsbSession(
     }
 
     private fun hostToUsbLoop() {
+        enterLatencyCriticalPriority()
         val buffer = ByteArray(BUFFER_SIZE)
         try {
             val input = socket.getInputStream()
@@ -53,7 +60,9 @@ class UsbSession(
                 val count = input.read(buffer)
                 if (count < 0) break
                 if (count == 0) continue
+                val started = SystemClock.elapsedRealtimeNanos()
                 port.write(buffer, count, WRITE_TIMEOUT_MS)
+                counters.recordMaxUsbWriteMicros(elapsedMicros(started))
                 counters.hostToUsbBytes.addAndGet(count.toLong())
                 counters.usbWrites.incrementAndGet()
                 counters.lastActivityMillis.set(System.currentTimeMillis())
@@ -78,6 +87,20 @@ class UsbSession(
         BridgeState.lastUsbError = detail
         Log.e(TAG, detail, error)
     }
+
+    private fun enterLatencyCriticalPriority() {
+        try {
+            // Match usb-serial-for-android's SerialInputOutputManager default.
+            // These threads spend almost all their time blocked in USB/socket
+            // I/O, but must run promptly when a Klipper packet becomes ready.
+            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        } catch (error: Exception) {
+            Log.w(TAG, "Could not raise bridge thread priority", error)
+        }
+    }
+
+    private fun elapsedMicros(startedNanos: Long): Long =
+        (SystemClock.elapsedRealtimeNanos() - startedNanos) / 1_000L
 
     companion object {
         private const val TAG = "KlipperUsbSession"

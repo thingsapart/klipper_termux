@@ -1655,7 +1655,11 @@ class MainActivity : Activity() {
                 content.addView(textView(
                     "${if (active) "●" else "○"}  TX  ${snapshot.hostToUsbBytes} B   ${txRate} B/s\n" +
                         "${if (active) "●" else "○"}  RX  ${snapshot.usbToHostBytes} B   ${rxRate} B/s\n" +
-                        "USB writes ${snapshot.usbWrites}  ·  reads ${snapshot.usbReads}  ·  errors ${snapshot.errors}",
+                        "USB writes ${snapshot.usbWrites}  ·  reads ${snapshot.usbReads}  ·  errors ${snapshot.errors}\n" +
+                        "Peak write  USB %.1f ms  ·  socket %.1f ms".format(
+                            snapshot.maxUsbWriteMicros / 1000.0,
+                            snapshot.maxSocketWriteMicros / 1000.0,
+                        ),
                     13f,
                     if (active) R.color.mainsail_primary else R.color.mainsail_text_secondary,
                 ).apply {
