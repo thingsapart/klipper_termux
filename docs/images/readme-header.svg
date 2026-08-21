@@ -2,14 +2,10 @@
   <title id="title">Klipper // Android</title>
   <desc id="desc">Klipper For Android logo and title in red, blue, and Android green</desc>
   <defs>
-    <filter id="title-glow" x="-20%" y="-60%" width="140%" height="220%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="color-glow" />
-      <feFlood flood-color="#FFFFFF" flood-opacity="0.14" result="white" />
-      <feComposite in="white" in2="SourceGraphic" operator="in" result="white-shape" />
-      <feGaussianBlur in="white-shape" stdDeviation="8" result="white-glow" />
+    <filter id="separator-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="glow" />
       <feMerge>
-        <feMergeNode in="color-glow" />
-        <feMergeNode in="white-glow" />
+        <feMergeNode in="glow" />
         <feMergeNode in="SourceGraphic" />
       </feMerge>
     </filter>
@@ -30,9 +26,9 @@
     <path fill="#F5F5F5" d="M30 18h17v27l27-27h21L65 50l31 42H74L52 62l-5 5v25H30z" />
   </g>
 
-  <g filter="url(#title-glow)" font-family="Roboto Condensed, Roboto, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="1">
+  <g font-family="Roboto Condensed, Roboto, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="1">
     <text x="190" y="113" fill="#FF4D57">Klipper</text>
-    <text x="440" y="113" fill="#2196F3">//</text>
-    <text x="535" y="113" fill="#3DDC84">Android</text>
+    <text x="465" y="113" fill="#2196F3" filter="url(#separator-glow)">//</text>
+    <text x="565" y="113" fill="#3DDC84">Android</text>
   </g>
 </svg>
