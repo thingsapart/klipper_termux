@@ -10,7 +10,7 @@ Klipper ↔ PTY ↔ native C bridge ↔ loopback TCP ↔ Android USB service ↔
 
 - Guided installation and incremental updates for Klipper, Moonraker, Mainsail, nginx, and supervised Termux services.
 - Low-overhead native serial forwarding with an authenticated binary handshake and raw pass-through afterward.
-- USB CDC-ACM, CH340/CH341, CP210x, FTDI, and PL2303 support through `usb-serial-for-android`.
+- USB CDC-ACM, CH340/CH341, CP210x, FTDI, and PL2303 support through [`usb-serial-for-android`](https://github.com/mik3y/usb-serial-for-android).
 - A Mainsail WebView, live bridge/service status, optional SSH on port 2020, and LAN/mDNS addresses.
 - Termux-native firmware profiles for common BTT/Voron boards, incremental builds, SD export, and browser downloads at `/firmware/`.
 
