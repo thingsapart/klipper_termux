@@ -28,7 +28,7 @@
 
   <g font-family="Roboto Condensed, Roboto, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="1">
     <text x="190" y="113" fill="#FF4D57">Klipper</text>
-    <text x="465" y="113" fill="#2196F3" filter="url(#separator-glow)">//</text>
-    <text x="565" y="113" fill="#3DDC84">Android</text>
+    <text x="442" y="113" fill="#2196F3" filter="url(#separator-glow)">//</text>
+    <text x="510" y="113" fill="#3DDC84">Android</text>
   </g>
 </svg>
