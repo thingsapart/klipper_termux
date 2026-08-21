@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-header.svg" alt="[K] Klipper // Android" width="820">
+  <img src="docs/images/readme-header.png" alt="[K] Klipper // Android" width="820">
 </p>
 
 Runs unmodified mainline Klipper, Moonraker, and Mainsail on **not-rooted** phones running Android 7 or newer (released in 2016), with Termux providing the Linux userland. The Android app supplies the Termux-to-USB serial bridge Android requires and doubles as the command center for setup, updates, status, SSH, Mainsail, and controller-firmware builds - and all that running native binaries, avoiding the proot overhead.
