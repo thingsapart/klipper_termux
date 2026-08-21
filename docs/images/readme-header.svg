@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="180" viewBox="0 0 1040 180" role="img" aria-labelledby="title desc">
+  <title id="title">Klipper // Android</title>
+  <desc id="desc">Klipper For Android logo and title in red, blue, and Android green</desc>
+  <defs>
+    <filter id="title-glow" x="-20%" y="-60%" width="140%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="color-glow" />
+      <feFlood flood-color="#FFFFFF" flood-opacity="0.14" result="white" />
+      <feComposite in="white" in2="SourceGraphic" operator="in" result="white-shape" />
+      <feGaussianBlur in="white-shape" stdDeviation="8" result="white-glow" />
+      <feMerge>
+        <feMergeNode in="color-glow" />
+        <feMergeNode in="white-glow" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="logo-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="2" y="2" width="1036" height="176" rx="22" fill="#0E1013" stroke="#2C3138" stroke-width="4" />
+
+  <g transform="translate(42 35)" filter="url(#logo-glow)">
+    <rect width="110" height="110" rx="5" fill="#1E1E1E" />
+    <rect width="12" height="110" rx="3" fill="#2196F3" />
+    <path fill="#F5F5F5" d="M30 18h17v27l27-27h21L65 50l31 42H74L52 62l-5 5v25H30z" />
+  </g>
+
+  <g filter="url(#title-glow)" font-family="Roboto Condensed, Roboto, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="1">
+    <text x="190" y="113" fill="#FF4D57">Klipper</text>
+    <text x="440" y="113" fill="#2196F3">//</text>
+    <text x="535" y="113" fill="#3DDC84">Android</text>
+  </g>
+</svg>
