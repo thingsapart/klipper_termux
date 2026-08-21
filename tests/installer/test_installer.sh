@@ -198,6 +198,7 @@ grep -q '^enable_config_write_access: True$' "$ROOT/installer/config/moonraker.c
 grep -q '^\[zeroconf\]$' "$ROOT/installer/config/moonraker.conf"
 grep -q '^mdns_hostname: klipper-android$' "$ROOT/installer/config/moonraker.conf"
 grep -Fq 'proxy_set_header Host $http_host;' "$ROOT/installer/config/nginx.conf"
+grep -Fq 'location = /firmware { return 301 /firmware/; }' "$ROOT/installer/config/nginx.conf"
 grep -q '^device=main,auto,250000,8,1,none,dtr+rts,' \
   "$ROOT/installer/config/bridge.conf.example"
 grep -q 'migrate legacy bridge flags to dtr+rts' "$ROOT/installer/install.sh"
