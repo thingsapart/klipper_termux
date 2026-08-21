@@ -121,7 +121,10 @@ pause, or communication delay/retransmission.
 - Update both the Android app and Termux bridge. Current versions run the two
   USB forwarding threads at Android's latency-critical I/O priority, keep 32
   packet-sized reads queued across short scheduler/GC pauses, and forward PTY
-  data in the same nonblocking event-loop pass.
+  data in the same nonblocking event-loop pass. UPDATE also rebuilds Klipper's
+  C helper to use Android's reliable `CLOCK_MONOTONIC` clock. Some older vendor
+  kernels return corrupt `CLOCK_MONOTONIC_RAW` timestamps, which appear in the
+  log as impossible MCU-frequency swings even when serial traffic is clean.
 - In the app's USB device card, watch **Peak write**. A USB value approaching
   100 ms points to the Android/USB path; a high socket value points to Termux or
   Klipper not draining the loopback connection promptly. These are high-water
@@ -132,6 +135,10 @@ pause, or communication delay/retransmission.
   microsteps, speed, or pressure advance, implicates MCU load. A collapsing
   `buffer_time` with host CPU or memory pressure implicates a host scheduling
   stall.
+- Repeated `Resetting prediction variance` lines with multi-megahertz frequency
+  changes, especially alongside zero retransmits and low MCU/host load, point
+  to corrupt host timestamps rather than the MCU crystal or USB latency. Run
+  UPDATE so the Android clock compatibility rebuild is applied.
 - Keep battery optimization disabled for both apps, use a powered OTG hub and
   a short data cable, and avoid testing through an unpowered hub.
 

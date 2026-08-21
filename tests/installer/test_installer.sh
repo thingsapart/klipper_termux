@@ -110,6 +110,7 @@ cat >"$wrapper_home/klipper/klippy/chelper/__init__.py" <<'PY'
 import os
 COMPILE_ARGS = "-shared -o %s %s"
 def check_build_c_library():
+    assert " -include " in COMPILE_ARGS
     assert COMPILE_ARGS.endswith(" -lm")
     return os.path.join(os.path.dirname(__file__), "c_helper.so")
 PY
@@ -137,7 +138,10 @@ PY
 WRAPPER_PREFIX="$wrapper_home/usr" PYTHONPATH="$wrapper_home/python-hooks" \
   python3 "$wrapper_home/klippy-android.py" \
   | grep -q 'android PTY chmod ignored'
-grep -q -- '-lm' "$wrapper_home/.local/state/klipper-android/c-helper-linked-libm"
+grep -q 'CLOCK_MONOTONIC' \
+  "$wrapper_home/.local/state/klipper-android/c-helper-android-clock-v1"
+grep -q 'CLOCK_MONOTONIC_RAW' \
+  "$wrapper_home/.local/state/klipper-android/android-monotonic-clock.h"
 cat >"$wrapper_home/klipper/klippy/klippy.py" <<'PY'
 import os
 os.chmod("/tmp/not-an-android-pty", 0o660)
