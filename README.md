@@ -52,6 +52,6 @@ ctest --test-dir build --output-on-failure
 tests/installer/test_installer.sh
 ```
 
-See [INSTALL.md](docs/INSTALL.md) for the complete phone workflow, [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for architecture and support decisions, and [PROTOCOL.md](docs/PROTOCOL.md) for the bridge wire format.
+See [INSTALL.md](docs/INSTALL.md) for the complete phone workflow and [PROTOCOL.md](docs/PROTOCOL.md) for the bridge wire format.
 
 Treat the phone, USB link, and host software as control infrastructure—not a safety system. Supervise initial hardware tests and keep the printer's independent thermal protections enabled.
